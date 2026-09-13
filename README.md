@@ -3,7 +3,7 @@
 <p align="center"><img src="frontend/src/assets/hero.png" width="200" alt="AgentJail containment layers" /></p>
 <p align="center"><strong>A runtime firewall for autonomous agents.</strong><br />AgentJail decides whether an agent tool call should run, be blocked, or wait for a human — <em>before</em> infrastructure changes.</p>
 
-<p align="center"><strong>Live:</strong> <a href="https://agentjail.onrender.com/ariai-logic">agentjail.onrender.com</a></p>
+<p align="center"><strong>Live:</strong> <a href="https://agentjail.onrender.com/ariai-logic">agentjail.onrender.com</a> · <strong>Demo video:</strong> <a href="media/AgentJail-demo.mp4">media/AgentJail-demo.mp4</a> (2 min)</p>
 <p align="center"><a href="#the-problem">Problem</a> · <a href="#the-demo">Demo</a> · <a href="#what-is-real">Evidence</a> · <a href="#run-locally">Run locally</a></p>
 
 ---

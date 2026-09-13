@@ -27,5 +27,3 @@ Thumbs.db
 # Coverage output
 .coverage
 
-# Rendered demo video (too large for git)
-media/
