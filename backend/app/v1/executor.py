@@ -10,7 +10,17 @@ import copy
 from typing import Any, Protocol
 
 
+class ToolExecutionError(RuntimeError):
+    """A tool reached its executor but did not complete safely."""
+
+    def __init__(self, message: str, *, result: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.result = result
+
+
 class ToolExecutor(Protocol):
+    provider: str
+
     def execute(self, tool_name: str, parameters: dict[str, Any]) -> dict[str, Any]: ...
 
     def request_count(self) -> int: ...
@@ -28,6 +38,8 @@ class IndependentMockExecutor:
     Proof rule: if AgentJail claims deny, this server must show zero new requests
     and unchanged state. AgentJail cannot forge that.
     """
+
+    provider = "mock"
 
     def __init__(self) -> None:
         self._ledger: list[dict[str, Any]] = []
@@ -75,6 +87,8 @@ class IndependentMockExecutor:
         return {
             "simulated": True,
             "independent_ledger": True,
+            "provider": self.provider,
+            "sandbox_created": False,
             "tool_name": tool_name,
             "parameters": dict(parameters),
             "status": "ok",

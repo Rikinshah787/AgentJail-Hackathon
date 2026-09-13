@@ -16,7 +16,7 @@ from typing import Any
 
 from .db import utcnow
 from .engine import authorize as engine_authorize
-from .executor import MockExecutor
+from .executor import MockExecutor, ToolExecutionError, ToolExecutor
 from .ids import new_id
 from .schemas import AuthorizeRequest, AuthorizeResponse, CheckResult, ScarMatch
 from .serialize import to_plain
@@ -25,7 +25,7 @@ from .tracing import trace_authorize, trace_agent_action
 
 
 class Gateway:
-    def __init__(self, store: Store, executor: MockExecutor | None = None) -> None:
+    def __init__(self, store: Store, executor: ToolExecutor | None = None) -> None:
         self.store = store
         self.executor = executor or MockExecutor()
 
@@ -55,9 +55,19 @@ class Gateway:
         executed = False
         execution_result = None
         if execute and outcome["decision"] == "allow":
-            execution_result = self.executor.execute(request.tool_call.tool_name, request.tool_call.parameters)
-            # Independent ledger is the source of truth — not this assignment alone.
-            executed = self.executor.request_count() == before_n + 1
+            try:
+                execution_result = self.executor.execute(
+                    request.tool_call.tool_name, request.tool_call.parameters
+                )
+                # Independent ledger is the source of truth — not this assignment alone.
+                executed = (
+                    self.executor.request_count() == before_n + 1
+                    and execution_result.get("status") == "ok"
+                )
+            except ToolExecutionError as exc:
+                # Preserve the authorization decision while proving execution
+                # failed closed. Never fall back to a local executor.
+                execution_result = exc.result
         after_n = self.executor.request_count()
         state_changed = self.executor.snapshot()["state"] != before_state
         matched = outcome.get("matched_scars") or []
@@ -142,6 +152,7 @@ class Gateway:
             policy_ids=outcome.get("policy_ids") or [],
             decision_latency_ms=outcome.get("decision_latency_ms") or 0,
             created_at=decision_row.created_at if decision_row.created_at.tzinfo else decision_row.created_at.replace(tzinfo=timezone.utc),
+            execution_result=execution_result,
         )
 
     def resolve_approval(
@@ -177,8 +188,16 @@ class Gateway:
         if approve:
             row.status = "approved"
             before_n = self.executor.request_count()
-            execution_result = self.executor.execute(stored["tool_name"], stored.get("parameters") or {})
-            executed = self.executor.request_count() == before_n + 1
+            try:
+                execution_result = self.executor.execute(
+                    stored["tool_name"], stored.get("parameters") or {}
+                )
+                executed = (
+                    self.executor.request_count() == before_n + 1
+                    and execution_result.get("status") == "ok"
+                )
+            except ToolExecutionError as exc:
+                execution_result = exc.result
         else:
             row.status = "denied"
         from .db import DecisionRow

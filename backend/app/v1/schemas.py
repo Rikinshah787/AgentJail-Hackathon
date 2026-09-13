@@ -89,6 +89,7 @@ class AuthorizeResponse(BaseModel):
     policy_ids: list[str]
     decision_latency_ms: float
     created_at: datetime
+    execution_result: dict[str, Any] | None = None
 
 
 class ApprovalActionRequest(BaseModel):

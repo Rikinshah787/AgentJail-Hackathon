@@ -2,15 +2,37 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from sqlalchemy.orm import Session
 
 from .db import Base, make_engine, make_session_factory
-from .executor import MockExecutor
+from .executor import MockExecutor, ToolExecutor
 from .seed import reset_and_seed, seed_if_empty
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+except ImportError:
+    pass
 
 _engine = None
 _Session = None
-_executor = MockExecutor()
+
+def build_executor() -> ToolExecutor:
+    mode = os.getenv("AGENTJAIL_EXECUTOR", "mock").strip().lower()
+    if mode == "mock":
+        return MockExecutor()
+    if mode == "coreweave":
+        from .coreweave_executor import CoreWeaveSandboxExecutor
+
+        return CoreWeaveSandboxExecutor()
+    raise RuntimeError("AGENTJAIL_EXECUTOR must be 'mock' or 'coreweave'.")
+
+
+_executor: ToolExecutor = build_executor()
 
 
 def init_runtime() -> None:
@@ -28,12 +50,11 @@ def session() -> Session:
     return _Session()
 
 
-def executor() -> MockExecutor:
+def executor() -> ToolExecutor:
     return _executor
 
 
 def reset_demo() -> None:
-    global _executor
-    _executor = MockExecutor()
+    _executor.reset()
     with session() as db:
         reset_and_seed(db)
