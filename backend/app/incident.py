@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any, Callable, Literal
 
-from .attacker import generate_mutated_alert
+from .attacker import generate_attack_proposal
 from .guard import DecisionResult, ToolCall
 from .observability import weave_enabled
 
@@ -15,7 +15,7 @@ Mode = Literal["jail", "god"]
 def _serialize_result(result: DecisionResult) -> dict[str, Any]:
     outcome = asdict(result)
     scar = outcome.get("scar_created")
-    if scar is not None:
+    if scar is not None and not isinstance(scar, dict):
         outcome = {**outcome, "scar_created": asdict(scar)}
     return outcome
 
@@ -26,7 +26,7 @@ def run_traced_incident(
     mode: Mode,
     base_call: ToolCall,
     evaluate: Callable[[ToolCall], DecisionResult],
-) -> tuple[ToolCall, DecisionResult, str | None]:
+) -> tuple[ToolCall, DecisionResult, str | None, dict[str, object] | None]:
     """
     Returns (call, result, attack_variant).
 
@@ -35,20 +35,22 @@ def run_traced_incident(
     - agent_jail.guard_decision
     """
 
-    def _execute() -> tuple[ToolCall, DecisionResult, str | None]:
+    def _execute() -> tuple[ToolCall, DecisionResult, str | None, dict[str, object] | None]:
         variant: str | None = None
+        proposal: dict[str, object] | None = None
         call = base_call
         if scenario == "mutated_replay":
-            variant = generate_mutated_alert()
+            proposal = generate_attack_proposal()
+            variant = str(proposal["rationale"])
             call = ToolCall(
-                base_call.tool,
+                str(proposal["requested_tool"]),
                 base_call.actor_id,
-                base_call.source,
+                str(proposal["source"]),
                 base_call.source_verified,
-                {**base_call.payload, "alert": variant},
+                {**base_call.payload, **proposal["parameters"], "alert": variant},
             )
         result = evaluate(call)
-        return call, result, variant
+        return call, result, variant, proposal
 
     if not weave_enabled():
         return _execute()
@@ -62,10 +64,11 @@ def run_traced_incident(
 
     @weave.op(name="agent_jail.incident")
     def incident() -> dict[str, Any]:
-        call, result, variant = _execute()
+        call, result, variant, proposal = _execute()
         box["call"] = call
         box["result"] = result
         box["variant"] = variant
+        box["proposal"] = proposal
         payload = asdict(call)
         outcome = _serialize_result(result)
         decision = guard_decision_op(payload, outcome, scenario=scenario, mode=mode)
@@ -73,6 +76,7 @@ def run_traced_incident(
             "scenario": scenario,
             "mode": mode,
             "attack_variant": variant,
+            "attacker_proposal": proposal,
             "tool_call": payload,
             "result": outcome,
             "decision": decision,
@@ -87,4 +91,4 @@ def run_traced_incident(
     ):
         incident()
 
-    return box["call"], box["result"], box["variant"]
+    return box["call"], box["result"], box["variant"], box["proposal"]

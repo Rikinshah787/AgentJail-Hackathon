@@ -661,6 +661,15 @@ export async function runWeaveEvaluation(includeInjec = true): Promise<Resource<
   return { source: 'live', data: isRecord(body) ? body : { raw: body } }
 }
 
+export async function runGodVsJailEvaluation(): Promise<Resource<Record<string, unknown>>> {
+  const { res, body } = await request(`${V1}/evaluations/god-vs-jail`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) throw await toApiError(res, 'God vs AgentJail evaluation failed')
+  return { source: 'live', data: isRecord(body) ? body : { raw: body } }
+}
+
 export async function fetchWeaveStatus(): Promise<
   Resource<{
     weaveEnabled: boolean

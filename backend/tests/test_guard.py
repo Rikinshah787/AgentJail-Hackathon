@@ -46,6 +46,8 @@ class AgentJailGuardTests(unittest.TestCase):
                 payload={"role": "cluster-admin"},
             )
         )
+        self.assertFalse(self.guard.scars[0].active)
+        self.guard.activate_scar(0)
         replay = self.guard.evaluate(
             ToolCall(
                 tool="create_service_identity",
@@ -57,6 +59,7 @@ class AgentJailGuardTests(unittest.TestCase):
         )
         self.assertEqual(replay.decision, "deny")
         self.assertTrue(replay.matched_scar)
+        self.assertTrue(self.guard.scars[0].active)
 
     def test_verified_privilege_requires_approval(self) -> None:
         result = self.guard.evaluate(

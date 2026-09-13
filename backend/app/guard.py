@@ -22,6 +22,7 @@ class Scar:
     risk: Literal["high", "critical"]
     action: Literal["deny", "approval_required"]
     evidence: tuple[str, ...]
+    active: bool = False
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,19 @@ class Guard:
 
     _PRIVILEGED_TOOLS = frozenset({"create_service_identity", "change_network_access", "rotate_secrets"})
     _CONTROL_PLANE = frozenset({"control-plane", "kube-apiserver", "etcd"})
+
+    def activate_scar(self, index: int) -> Scar:
+        candidate = self.scars[index]
+        active = Scar(
+            pattern=candidate.pattern,
+            tool=candidate.tool,
+            risk=candidate.risk,
+            action=candidate.action,
+            evidence=candidate.evidence,
+            active=True,
+        )
+        self.scars[index] = active
+        return active
 
     def evaluate(self, call: ToolCall) -> DecisionResult:
         scar = self._matching_scar(call)
@@ -132,6 +146,8 @@ class Guard:
 
     def _matching_scar(self, call: ToolCall) -> Scar | None:
         for scar in self.scars:
+            if not scar.active:
+                continue
             if scar.pattern == "unverified source requested privileged infrastructure access":
                 if not call.source_verified and call.tool in self._PRIVILEGED_TOOLS:
                     return scar

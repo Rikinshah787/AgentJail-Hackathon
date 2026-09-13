@@ -20,6 +20,15 @@ export type ArenaEvent = {
   transition: { status: string; summary: string }
   environment: { workloads: Record<string, string>; identities?: Record<string, string> }
   attack_variant?: string | null
+  candidate_scar_index?: number | null
+  attacker_proposal?: {
+    source: string
+    requested_tool: string
+    parameters: Record<string, unknown>
+    rationale: string
+    model: string
+    model_powered: boolean
+  } | null
 }
 
 const VAULTS = {

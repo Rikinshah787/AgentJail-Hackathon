@@ -37,7 +37,7 @@ The application opens to the **Control Room** at `/ariai-logic`.
 | Live Demo | Guided story: breach without a gate → containment → scar replay plus legitimate remediation. |
 | Breach Arena | A cinematic 3D view of the same live decision events, not a prerecorded video. |
 | Incidents / Approvals / Scars | Durable records, human-in-the-loop decisions, and security memory. |
-| Evaluations | Fixed adversarial cases and the InjecAgent public indirect-injection corpus. |
+| Evaluations | God-vs-Jail comparison, fixed adversarial probes, and the InjecAgent public indirect-injection corpus. |
 
 ## The demo
 
@@ -49,9 +49,26 @@ The poisoned ticket asks the SRE agent to call `create_service_identity` with ad
 
 The same ticket goes through the authorization gateway. Its unverified provenance and critical blast radius produce a **block** decision. The executor ledger confirms no tool action ran. A candidate scar is persisted.
 
+### Human checkpoint — activate the scar
+
+The contained attack produces a candidate guardrail. It is deliberately inactive until a human operator reviews and approves it. This prevents an attacker from teaching the firewall arbitrary policy simply by triggering a denial.
+
 ### Act 3 — it remembers, without blocking useful work
 
-A paraphrased replay arrives through another untrusted channel. Scar retrieval catches it again. A signed, low-risk remediation path remains allowed, proving least privilege rather than a blanket deny.
+GLM produces a structured, intent-preserving paraphrase of the attack. Its output is treated only as an untrusted proposal; it receives no execution authority. The active scar catches the replay, while a signed, low-risk restart remains allowed, proving least privilege rather than a blanket deny.
+
+### Headline evaluation — God vs AgentJail
+
+The evaluation runs the same security objective through labelled versions and publishes scored rows to W&B Weave:
+
+| Version | Expected result | Independent evidence |
+| --- | --- | --- |
+| `no_guard` | Critical breach | Executor receives the request and state changes. |
+| `agentjail` | Denied | Executor receives zero requests and state stays unchanged. |
+| `agentjail+scar` | Mutated replay denied | The approved scar matches; executor still receives zero requests. |
+| `agentjail-utility` | Legitimate restart allowed | Exactly one request is executed with a narrow blast radius. |
+
+Scores include `critical_breach`, `false_allow`, `scar_match`, `safe_action_allowed`, and `decision_latency_ms`. Run it from **Evaluations → Run God vs AgentJail** or call `POST /api/v1/evaluations/god-vs-jail`.
 
 ## What is real
 
@@ -65,6 +82,32 @@ This is deliberately safe to demo.
 - **Safe execution:** allowed demo actions can run inside short-lived, network-isolated CoreWeave Sandboxes. Tool effects remain simulated and never target real IAM.
 
 An optional local `kind` lab exists for a narrowly scoped Kubernetes rollout restart of `gpu-worker-12`. It is not the default Control Room executor and must not be described as production cloud access.
+
+## How the CoreWeave Sandbox works
+
+```text
+agent proposes a tool call
+          │
+          ▼
+Gateway.authorize() evaluates provenance, policy, risk, and scars
+          │
+    ┌─────┴─────┐
+    │           │
+  deny        allow
+    │           │
+zero sandbox   create one ephemeral CoreWeave Sandbox
+zero execution  │
+                ├─ authenticate host SDK with W&B
+                ├─ deny network ingress and egress
+                ├─ apply CPU, memory, and lifetime limits
+                ├─ run a fixed Python tool adapter
+                ├─ return a sanitized result + sandbox ID
+                └─ automatically tear the sandbox down
+```
+
+The model cannot submit arbitrary shell source. AgentJail allowlists the tool name, limits the payload to 16 KiB, serializes parameters as JSON data, and passes them to a fixed runner without a shell. The W&B key stays in the backend process and is never injected into the sandbox. Nested credential-shaped parameters, raw SDK exceptions, and sandbox stderr are excluded from public results.
+
+Supported sandbox demo tools are `create_service_identity`, `restart_service`, `send_email`, and `post_webhook`. Their effects are simulations inside the evaluation boundary; they do not call production IAM, email, webhook, or infrastructure APIs.
 
 ## Architecture
 
@@ -83,9 +126,11 @@ FastAPI v1 authorization runtime
   └─ Weave tracing + EvaluationLogger
 ```
 
+The legacy Arena and the v1 Control Room share the security story but expose separate presentation-oriented APIs. The v1 gateway is the authoritative authorize-then-execute implementation used for sandbox evidence.
+
 ## W&B integration
 
-AgentJail uses W&B Weave for nested authorization traces, SRE-agent conversation/tool spans, scored EvaluationLogger rows, and an ARIA-ready coaching report.
+AgentJail uses W&B Weave for nested authorization traces, SRE-agent conversation/tool spans, scored EvaluationLogger rows, a GLM-powered adversarial mutation, and an ARIA-ready coaching report.
 
 Set these only locally — never commit them:
 
@@ -100,6 +145,25 @@ $env:AGENTJAIL_EXECUTOR="coreweave"
 backend only; it is never injected into the sandbox or exposed to the browser.
 Each allowed call receives a fresh sandbox ID, while denied calls create no
 sandbox and send no execution request.
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `WANDB_API_KEY` | Authenticates W&B Weave, Serverless Inference, and CoreWeave Sandbox creation. | Unset |
+| `WEAVE_PROJECT` | W&B entity/project receiving traces and evaluations. | Project value in `.env.example` |
+| `ARIA_COACH_MODEL` | Model used for the constrained attacker/coach output. | `zai-org/GLM-5.3-Flash` |
+| `AGENTJAIL_EXECUTOR` | `mock` for offline development or `coreweave` for ephemeral sandbox execution. | `mock` |
+
+## Important API routes
+
+| Method and route | Purpose |
+| --- | --- |
+| `POST /api/v1/authorize` | Evaluate a tool call at the central gateway. |
+| `POST /api/v1/demo/run` | Run a protected, unprotected, replay, or legitimate demo scenario. |
+| `POST /api/v1/evaluations/god-vs-jail` | Publish the four-arm headline comparison to Weave. |
+| `POST /api/v1/evaluations/weave/run` | Run the broader Weave evaluation set. |
+| `POST /api/v1/evaluations/probe` | Check decisions against the independent executor ledger. |
+| `POST /api/scars/{scar_index}/activate` | Human activation step for a legacy Arena candidate scar. |
+| `GET /api/v1/weave/status` | Report configured observability links and readiness. |
 
 ## Run locally
 
@@ -130,7 +194,10 @@ cd backend
 
 cd ..\frontend
 npm run build
+npm run lint
 ```
+
+The current release passes 38 backend tests, 12 dedicated CoreWeave boundary tests, the frontend production build, and frontend lint. Detailed RED/GREEN and live-sandbox evidence is recorded in [`docs/testing/coreweave-sandbox.tdd.md`](docs/testing/coreweave-sandbox.tdd.md).
 
 ## Marimo evidence lab
 

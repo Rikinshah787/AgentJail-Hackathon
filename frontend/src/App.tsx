@@ -62,6 +62,17 @@ type AriaCoach = {
   }
 }
 
+type WeaveRun = {
+  ok: boolean
+  total?: number
+  passed?: number
+  pass_rate?: number
+  weave_evals_url?: string
+  honest_claim?: string
+  comparison?: Record<string, unknown>
+  error?: string
+}
+
 function explainDecision(event: ArenaEvent | null): { title: string; body: string } {
   if (!event) {
     return {
@@ -114,7 +125,11 @@ export default function App() {
   )
   const [evalReport, setEvalReport] = useState<EvalReport | null>(null)
   const [injecReport, setInjecReport] = useState<InjecAgentReport | null>(null)
-  const [stats, setStats] = useState({ blocked: 0, allowed: 0, scars: 0, approvals: 0 })
+  const [stats, setStats] = useState({ blocked: 0, allowed: 0, breaches: 0, scars: 0, approvals: 0 })
+  const [candidateScar, setCandidateScar] = useState<number | null>(null)
+  const [scarApproved, setScarApproved] = useState(false)
+  const [weaveRun, setWeaveRun] = useState<WeaveRun | null>(null)
+  const [weaveLoading, setWeaveLoading] = useState(false)
   const [aria, setAria] = useState<AriaCoach | null>(null)
   const [ariaLoading, setAriaLoading] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -124,10 +139,15 @@ export default function App() {
     setCloud(data.environment)
     setStats((s) => ({
       blocked: s.blocked + (data.decision === 'deny' ? 1 : 0),
-      allowed: s.allowed + (data.executed ? 1 : 0),
+      allowed: s.allowed + (data.mode === 'jail' && data.executed ? 1 : 0),
+      breaches: s.breaches + (data.mode === 'god' && data.executed ? 1 : 0),
       scars: data.scars,
       approvals: s.approvals + (data.decision === 'approval_required' ? 1 : 0),
     }))
+    if (data.candidate_scar_index != null) {
+      setCandidateScar(data.candidate_scar_index)
+      setScarApproved(false)
+    }
   }, [])
 
   const askAria = useCallback(async () => {
@@ -177,7 +197,10 @@ export default function App() {
     setEvalReport(null)
     setInjecReport(null)
     setAria(null)
-    setStats({ blocked: 0, allowed: 0, scars: 0, approvals: 0 })
+    setStats({ blocked: 0, allowed: 0, breaches: 0, scars: 0, approvals: 0 })
+    setCandidateScar(null)
+    setScarApproved(false)
+    setWeaveRun(null)
     setBanner('Runtime firewall for autonomous SRE agents')
     setStory('Click ACT 1 — show what happens when an agent has no firewall.')
     await fetch(`${API}/api/reset`, { method: 'POST' }).catch(() => undefined)
@@ -186,7 +209,9 @@ export default function App() {
   const act1 = useCallback(async () => {
     await fetch(`${API}/api/reset`, { method: 'POST' }).catch(() => undefined)
     setAria(null)
-    setStats({ blocked: 0, allowed: 0, scars: 0, approvals: 0 })
+    setStats({ blocked: 0, allowed: 0, breaches: 0, scars: 0, approvals: 0 })
+    setCandidateScar(null)
+    setScarApproved(false)
     setAct(1)
     await run(
       'poisoned_alert',
@@ -209,6 +234,10 @@ export default function App() {
   }, [run])
 
   const act3 = useCallback(async () => {
+    if (!scarApproved) {
+      setError('Approve the candidate guardrail before replaying the mutated attack.')
+      return
+    }
     setAct(3)
     await run(
       'mutated_replay',
@@ -224,15 +253,47 @@ export default function App() {
       'Signed alert restarts gpu-worker-12. Least privilege — not a blanket deny.',
     )
     await askAria()
-  }, [askAria, run])
+  }, [askAria, run, scarApproved])
 
   const playAll = useCallback(async () => {
     await act1()
     await new Promise((r) => setTimeout(r, 1600))
     await act2()
-    await new Promise((r) => setTimeout(r, 1600))
-    await act3()
-  }, [act1, act2, act3])
+    setBanner('HUMAN REVIEW REQUIRED')
+    setStory('The attack is contained. Approve the candidate guardrail, then run Act 3 to test it against GLM’s mutation.')
+  }, [act1, act2])
+
+  const approveScar = useCallback(async () => {
+    if (candidateScar == null) return
+    setLoading(true)
+    setError('')
+    try {
+      const response = await fetch(`${API}/api/scars/${candidateScar}/activate`, { method: 'POST' })
+      if (!response.ok) throw new Error('Candidate guardrail could not be activated')
+      setScarApproved(true)
+      setBanner('GUARDRAIL APPROVED · READY FOR ADVERSARIAL REPLAY')
+      setStory('Human-reviewed scar is active. Run Act 3: GLM will change the wording while preserving the dangerous intent.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Guardrail approval failed')
+    } finally {
+      setLoading(false)
+    }
+  }, [candidateScar])
+
+  const publishWeave = useCallback(async () => {
+    setWeaveLoading(true)
+    setError('')
+    try {
+      const response = await fetch(`${API}/api/v1/evaluations/god-vs-jail`, { method: 'POST' })
+      const data = (await response.json()) as WeaveRun
+      if (!response.ok || !data.ok) throw new Error(data.error || 'God vs AgentJail evaluation failed')
+      setWeaveRun(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Weave evaluation failed')
+    } finally {
+      setWeaveLoading(false)
+    }
+  }, [])
 
   const runEval = useCallback(async () => {
     setLoading(true)
@@ -414,7 +475,7 @@ export default function App() {
         </b>
         <b>
           {stats.allowed}
-          <small>ALLOWED</small>
+          <small>SAFE ALLOWED</small>
         </b>
         <b>
           {stats.scars}
@@ -429,6 +490,53 @@ export default function App() {
           <small>GUARD LATENCY</small>
         </b>
       </section>
+
+      {candidateScar != null && !scarApproved && (
+        <section className="candidate-policy">
+          <div>
+            <span className="eyebrow">CANDIDATE GUARDRAIL · HUMAN REVIEW</span>
+            <h2>Deny privileged identity creation from unverified sources</h2>
+            <p>Generated from the contained attack. It remains inactive until an operator approves it.</p>
+          </div>
+          <button type="button" disabled={loading} onClick={() => void approveScar()}>
+            Approve guardrail →
+          </button>
+        </section>
+      )}
+
+      {act >= 4 && aria && (
+        <section className="weave-receipt">
+          <div className="receipt-head">
+            <div>
+              <span className="eyebrow">W&B WEAVE · DECISION RECEIPT</span>
+              <h2>The trajectory, not a screenshot</h2>
+            </div>
+            <button type="button" disabled={weaveLoading} onClick={() => void publishWeave()}>
+              {weaveLoading
+                ? 'Scoring God vs Jail…'
+                : weaveRun?.ok
+                  ? 'God vs Jail published ✓'
+                  : 'Publish God vs Jail'}
+            </button>
+          </div>
+          <div className="receipt-grid">
+            <b>{stats.blocked}<small>ATTACKS BLOCKED</small></b>
+            <b>{stats.allowed}<small>LEGITIMATE ALLOWED</small></b>
+            <b>{Math.max(0, stats.breaches - 1)}<small>UNAUTHORIZED GUARDED EXECUTIONS</small></b>
+            <b>{aria.session.events}<small>DECISIONS TRACED</small></b>
+          </div>
+          {weaveRun?.ok && (
+            <a href={weaveRun.weave_evals_url || weaveUrl} target="_blank" rel="noreferrer">
+              Open Weave Evals ↗
+              {typeof weaveRun.passed === 'number' && typeof weaveRun.total === 'number'
+                ? ` · ${weaveRun.passed}/${weaveRun.total} checks`
+                : weaveRun.honest_claim
+                  ? ` · ${weaveRun.honest_claim}`
+                  : ''}
+            </a>
+          )}
+        </section>
+      )}
 
       <section className="explain-strip">
         <span className="eyebrow">WHAT JUST HAPPENED</span>
@@ -476,6 +584,17 @@ export default function App() {
               <p className="empty">—</p>
             )}
           </div>
+
+          {event?.attacker_proposal && (
+            <div className="cloud-card attacker-card">
+              <h3>GLM ATTACKER · STRUCTURED PROPOSAL</h3>
+              <div className="row"><code>model</code><b>{event.attacker_proposal.model}</b></div>
+              <div className="row"><code>source</code><b>{event.attacker_proposal.source}</b></div>
+              <div className="row"><code>tool</code><b>{event.attacker_proposal.requested_tool}</b></div>
+              <p className="aria-summary">{event.attacker_proposal.rationale}</p>
+              <small>{event.attacker_proposal.model_powered ? 'LIVE W&B SERVERLESS INFERENCE' : 'DETERMINISTIC SAFE FALLBACK'}</small>
+            </div>
+          )}
 
           {event?.pending_id && (
             <div className="cloud-card aria-card">

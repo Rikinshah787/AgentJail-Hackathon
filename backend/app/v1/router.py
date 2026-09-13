@@ -16,6 +16,7 @@ from .schemas import ApprovalActionRequest, AuthorizeRequest, DemoRunRequest
 from .serialize import to_plain
 from .store import Store, row_to_dict
 from .weave_eval import run_weave_evaluation
+from .god_vs_jail import run_god_vs_jail
 from .tracing import seed_agent_demo_conversation, weave_status as weave_status_payload
 
 router = APIRouter()
@@ -179,6 +180,13 @@ def evaluations_weave_run(include_injec: bool = True):
     """Run a full Weave EvaluationLogger suite (Evals tab + nested authorize traces)."""
     with session() as db:
         return run_weave_evaluation(Store(db), include_injec=include_injec)
+
+
+@router.post("/evaluations/god-vs-jail")
+def evaluations_god_vs_jail():
+    """Headline comparison: no_guard vs agentjail vs agentjail+scar on the same attack."""
+    with session() as db:
+        return run_god_vs_jail(Store(db))
 
 
 @router.post("/evaluations/probe")

@@ -102,6 +102,7 @@ def run_eval_suite(seed_scar: bool = True) -> dict[str, Any]:
         guard.evaluate(
             ToolCall("create_service_identity", "ops-agent-07", "seed-ticket", False, {"role": "cluster-admin"})
         )
+        guard.activate_scar(0)
 
     for case in CASES:
         result = guard.evaluate(case["call"])

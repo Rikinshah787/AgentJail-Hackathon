@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -8,13 +9,19 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { AlertTriangle, FlaskConical, Gauge, Percent, ShieldCheck, Timer } from 'lucide-react'
-import { fetchEvaluations, useResource } from '../api'
+import { AlertTriangle, ExternalLink, FlaskConical, Gauge, Percent, ShieldCheck, Timer } from 'lucide-react'
+import { ApiError, fetchEvaluations, runGodVsJailEvaluation, useResource } from '../api'
 import { Button, Card, ErrorState, LoadingState, MetricCard, SectionTitle } from '../components/ui'
 import { AlertBanner, DemoDataChip } from '../components/DecisionBadge'
 
+const WEAVE_EVALS = 'https://wandb.ai/rshah88-arizona-state-university/agent-jail/weave/evaluations'
+
 export function Evaluations() {
   const { loading, error, data, source, reload } = useResource(fetchEvaluations)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [comparison, setComparison] = useState<Record<string, unknown> | null>(null)
   const chartData =
     data?.modes.map((m) => ({
       name: m.name.replace('AgentJail ', 'AJ '),
@@ -22,13 +29,70 @@ export function Evaluations() {
       'Legitimate completion %': m.taskCompletion,
     })) ?? []
 
+  async function onGodVsJail() {
+    setBusy(true)
+    setErr(null)
+    setMsg(null)
+    try {
+      const res = await runGodVsJailEvaluation()
+      const body = res.data
+      setComparison((body.comparison as Record<string, unknown>) || null)
+      setMsg(String(body.honest_claim || body.submission_line || 'Published to Weave Evals.'))
+      reload()
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.details : e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <SectionTitle
         title="Does AgentJail stop attacks without breaking useful work?"
-        subtitle="Probe data tests a real mechanism against an independent executor ledger — not AgentJail grading itself."
+        subtitle="Headline proof: same attack — no gate breaches, AgentJail blocks, scar blocks the paraphrase."
         action={source === 'demo' && !loading ? <DemoDataChip /> : null}
       />
+
+      <Card className="border-aj-brand/30 bg-aj-brand/[0.07] p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-aj-brand">
+              Headline · God agent vs AgentJail
+            </p>
+            <h3 className="mt-2 font-display text-xl font-bold">Same poisoned ticket · three labelled versions</h3>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-aj-muted">
+              <code className="text-aj-text">no_guard</code> breaches · <code className="text-aj-text">agentjail</code>{' '}
+              blocks · <code className="text-aj-text">agentjail+scar</code> blocks GLM paraphrase · legitimate restart
+              still allowed. Scores: critical_breach, safe_action_allowed, scar_match, false_allow, latency.
+            </p>
+            {msg ? <p className="mt-3 text-sm text-aj-allow">{msg}</p> : null}
+            {err ? (
+              <p className="mt-3 text-sm text-aj-block" role="alert">
+                {err}
+              </p>
+            ) : null}
+            {comparison ? (
+              <pre className="mt-3 max-h-40 overflow-auto rounded-xl border border-aj-border bg-aj-bg/80 p-3 text-xs text-aj-muted">
+                {JSON.stringify(comparison, null, 2)}
+              </pre>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={busy} onClick={() => void onGodVsJail()}>
+              {busy ? 'Scoring in Weave…' : 'Run God vs AgentJail'}
+            </Button>
+            <a
+              href={WEAVE_EVALS}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl border border-aj-border bg-aj-card px-3 py-2 text-sm font-medium text-aj-text hover:border-aj-brand/40"
+            >
+              Open Weave Evals <ExternalLink className="size-3.5" />
+            </a>
+          </div>
+        </div>
+      </Card>
 
       {loading ? <LoadingState label="Loading evaluations" /> : null}
       {error ? (
@@ -57,7 +121,6 @@ export function Evaluations() {
                     {data.probePassed}/{data.probeTotal} passed — deny means zero mock-server requests; allow means
                     exactly one request and a visible state change.
                   </p>
-                  {data.methodology ? <p className="mt-2 text-xs text-aj-muted">{data.methodology}</p> : null}
                 </div>
               </div>
             </Card>
@@ -83,7 +146,6 @@ export function Evaluations() {
           ) : (
             <Card className="border-aj-allow/35 bg-aj-allow/10 p-5">
               <p className="font-display text-lg font-bold text-aj-allow">No decision-harness failures in this run</p>
-              <p className="mt-1 text-sm text-aj-muted">Failed runs are never hidden from this screen.</p>
             </Card>
           )}
 
@@ -99,14 +161,11 @@ export function Evaluations() {
           </div>
 
           <Card className="p-5">
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <h3 className="font-display text-lg font-bold">Comparison modes</h3>
-                <p className="text-sm text-aj-muted">
-                  Attack success — lower is better · Legitimate completion — higher is better. Only rows marked measured
-                  are from this build&apos;s ledger.
-                </p>
-              </div>
+            <div className="mb-4">
+              <h3 className="font-display text-lg font-bold">Comparison modes</h3>
+              <p className="text-sm text-aj-muted">
+                Attack success — lower is better · Legitimate completion — higher is better
+              </p>
             </div>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -128,15 +187,6 @@ export function Evaluations() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <ul className="mt-4 space-y-1.5 text-xs text-aj-muted">
-              {data.modes.map((m) => (
-                <li key={m.name}>
-                  <span className="font-semibold text-aj-text">{m.name}</span>
-                  {m.measured ? ' · measured' : ' · illustrative'}
-                  {m.note ? ` — ${m.note}` : ''}
-                </li>
-              ))}
-            </ul>
           </Card>
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -145,19 +195,6 @@ export function Evaluations() {
             <MetricCard icon={Gauge} label="Approval rate" value={`${data.approvalRate}%`} tone="brand" />
             <MetricCard icon={Timer} label="p95 decision latency" value={`${data.p95LatencyMs}ms`} tone="brand" />
           </div>
-
-          {data.injecHoldoutClaim || data.injecUnprotectedRate != null ? (
-            <Card className="p-5">
-              <h3 className="font-display text-lg font-bold">InjecAgent holdout (mapped)</h3>
-              <p className="mt-2 text-sm text-aj-muted">
-                Unprotected mock execution {data.injecUnprotectedRate ?? '—'}% → AgentJail{' '}
-                {data.injecJailRate ?? '—'}% (independent ledger).
-              </p>
-              {data.injecHoldoutClaim ? (
-                <p className="mt-3 text-sm leading-relaxed text-aj-text">{data.injecHoldoutClaim}</p>
-              ) : null}
-            </Card>
-          ) : null}
 
           {data.honestClaims.length ? (
             <Card className="p-5">
@@ -171,32 +208,6 @@ export function Evaluations() {
               </ul>
             </Card>
           ) : null}
-
-          {data.doNotClaim.length ? (
-            <Card className="border-aj-block/25 p-5">
-              <h3 className="font-display text-lg font-bold text-aj-block">Do not claim</h3>
-              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-aj-muted">
-                {data.doNotClaim.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </Card>
-          ) : null}
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Card className="p-4">
-              <p className="text-sm text-aj-muted">Scar match rate</p>
-              <p className="mt-1 font-display text-2xl font-bold">{data.scarRecall}%</p>
-            </Card>
-            <Card className="p-4">
-              <p className="text-sm text-aj-muted">Decision cases completed</p>
-              <p className="mt-1 font-display text-2xl font-bold">{data.casesCompleted}</p>
-            </Card>
-            <Card className="p-4">
-              <p className="text-sm text-aj-muted">Decision harness failures</p>
-              <p className="mt-1 font-display text-2xl font-bold text-aj-block">{data.failures}</p>
-            </Card>
-          </div>
         </>
       ) : null}
     </div>

@@ -88,6 +88,8 @@ class ArenaEvent(BaseModel):
     attack_variant: str | None = None
     weave_enabled: bool = False
     pending_id: str | None = None
+    attacker_proposal: dict[str, Any] | None = None
+    candidate_scar_index: int | None = None
 
 
 def call_for(scenario: str) -> tuple[ToolCall, str]:
@@ -145,7 +147,7 @@ def god_result(call: ToolCall) -> DecisionResult:
     )
 
 
-def _event(scenario: str, mode: Mode, call: ToolCall, target: str, result: DecisionResult, variant: str | None) -> ArenaEvent:
+def _event(scenario: str, mode: Mode, call: ToolCall, target: str, result: DecisionResult, variant: str | None, proposal: dict[str, object] | None = None) -> ArenaEvent:
     transition = cloud.apply(call.tool, call.payload, result.executed)
     real_transition = restart_allowed_worker(call.tool, call.payload, result.executed)
     if real_transition is not None and mode == "jail":
@@ -171,6 +173,8 @@ def _event(scenario: str, mode: Mode, call: ToolCall, target: str, result: Decis
         attack_variant=variant,
         weave_enabled=weave_enabled(),
         pending_id=pending_id,
+        attacker_proposal=proposal,
+        candidate_scar_index=(len(guard.scars) - 1) if result.scar_created is not None else None,
     )
 
 
@@ -186,14 +190,14 @@ def run(scenario: Scenario, mode: Mode = Query(default="jail")) -> ArenaEvent:
     def evaluate(call: ToolCall) -> DecisionResult:
         return god_result(call) if mode == "god" else guard.evaluate(call)
 
-    call, result, variant = run_traced_incident(
+    call, result, variant, proposal = run_traced_incident(
         scenario=scenario,
         mode=mode,
         base_call=base_call,
         evaluate=evaluate,
     )
     record_session_event(scenario=scenario, mode=mode, call=call, result=result)
-    return _event(scenario, mode, call, target, result, variant)
+    return _event(scenario, mode, call, target, result, variant, proposal)
 
 
 @app.post("/api/approve/{pending_id}", response_model=ArenaEvent)
@@ -273,6 +277,14 @@ def injecagent_play(
 @app.get("/api/scars")
 def scars() -> list[dict[str, object]]:
     return [asdict(s) for s in guard.scars]
+
+
+@app.post("/api/scars/{scar_index}/activate")
+def activate_legacy_scar(scar_index: int) -> dict[str, object]:
+    if scar_index < 0 or scar_index >= len(guard.scars):
+        raise HTTPException(status_code=404, detail="Candidate scar not found")
+    active = guard.activate_scar(scar_index)
+    return {"status": "active", "scar_index": scar_index, "scar": asdict(active)}
 
 
 @app.post("/api/reset")

@@ -160,6 +160,9 @@ def run_injecagent_eval(*, include_replays: bool = False) -> dict[str, Any]:
 
     replay_false_allows = 0
     if include_replays:
+        # The benchmark's replay phase represents analyst-confirmed scars.
+        for index in range(len(guard.scars)):
+            guard.activate_scar(index)
         for case in cases:
             if not case.mapped:
                 continue
