@@ -138,7 +138,7 @@ class CoreWeaveSandboxExecutorTests(unittest.TestCase):
 
         self.assertNotIn(marker, command[2])
         self.assertNotIn(marker, command[0:3])
-        self.assertNotIn(os.getenv("WANDB_API_KEY", "secret-not-present"), " ".join(command))
+        self.assertNotIn(os.getenv("WANDB_API_KEY") or "secret-not-present", " ".join(command))
         self.assertEqual(result["status"], "ok")
 
     def test_sandbox_failure_is_redacted_and_never_falls_back(self) -> None:
