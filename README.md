@@ -3,6 +3,7 @@
 <p align="center"><img src="frontend/src/assets/hero.png" width="200" alt="AgentJail containment layers" /></p>
 <p align="center"><strong>A runtime firewall for autonomous agents.</strong><br />AgentJail decides whether an agent tool call should run, be blocked, or wait for a human — <em>before</em> infrastructure changes.</p>
 
+<p align="center"><strong>Live:</strong> <a href="https://agentjail.onrender.com/ariai-logic">agentjail.onrender.com</a></p>
 <p align="center"><a href="#the-problem">Problem</a> · <a href="#the-demo">Demo</a> · <a href="#what-is-real">Evidence</a> · <a href="#run-locally">Run locally</a></p>
 
 ---
@@ -185,6 +186,12 @@ npm run dev -- --host 127.0.0.1
 ```
 
 Open [http://127.0.0.1:5173/ariai-logic](http://127.0.0.1:5173/ariai-logic), select **Live Demo**, and run the three acts in order.
+
+## Deploy (Render)
+
+The repo ships a multi-stage `Dockerfile` that builds the React Control Room and serves it from FastAPI, plus a `render.yaml` blueprint. The public instance runs at [https://agentjail.onrender.com](https://agentjail.onrender.com/ariai-logic) on Render's free tier (first request after idle can take ~30s to wake).
+
+Set `WANDB_API_KEY` in the Render dashboard; `WEAVE_PROJECT`, `ARIA_COACH_MODEL`, and `AGENTJAIL_EXECUTOR=mock` are defined in the blueprint. SQLite state lives on the instance's ephemeral disk and reseeds on restart.
 
 ## Verification
 
