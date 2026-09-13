@@ -174,6 +174,11 @@ class ImprovementLoopApiTests(unittest.TestCase):
             run = created.json()
             self.assertEqual(run["status"], "awaiting_human")
 
+            bypass = self.client.post(
+                f"/api/v1/scars/{run['candidate_scar_id']}/activate"
+            )
+            self.assertEqual(bypass.status_code, 409)
+
             invalid = self.client.post(
                 f"/api/v1/improvement/runs/{run['id']}/approve",
                 json={"reviewer": "", "review_reason": ""},
