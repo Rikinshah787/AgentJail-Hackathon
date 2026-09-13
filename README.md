@@ -160,7 +160,7 @@ sandbox and send no execution request.
 | `POST /api/v1/authorize` | Evaluate a tool call at the central gateway. |
 | `POST /api/v1/demo/run` | Run a protected, unprotected, replay, or legitimate demo scenario. |
 | `POST /api/v1/evaluations/god-vs-jail` | Publish the four-arm headline comparison to Weave. |
-| `POST /api/v1/evaluations/weave/run` | Run the broader Weave evaluation set. |
+| `POST /api/v1/evaluations/weave-run` | Run the broader Weave evaluation set. |
 | `POST /api/v1/evaluations/probe` | Check decisions against the independent executor ledger. |
 | `POST /api/scars/{scar_index}/activate` | Human activation step for a legacy Arena candidate scar. |
 | `GET /api/v1/weave/status` | Report configured observability links and readiness. |
@@ -197,7 +197,7 @@ npm run build
 npm run lint
 ```
 
-The current release passes 38 backend tests, 12 dedicated CoreWeave boundary tests, the frontend production build, and frontend lint. Detailed RED/GREEN and live-sandbox evidence is recorded in [`docs/testing/coreweave-sandbox.tdd.md`](docs/testing/coreweave-sandbox.tdd.md).
+The current release passes 46 backend tests (including 12 dedicated CoreWeave boundary tests and the governed self-improvement loop suite), the frontend production build, and frontend lint. Detailed RED/GREEN and live-sandbox evidence is recorded in [`docs/testing/coreweave-sandbox.tdd.md`](docs/testing/coreweave-sandbox.tdd.md).
 
 ## Marimo evidence lab
 

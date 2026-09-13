@@ -121,6 +121,11 @@ class Gateway:
                 },
             )
         self.store.commit()
+        # A zero-model-cost regulator checks active learned scars against live
+        # decisions. Any non-deny match is quarantined before future traffic.
+        from .improvement_loop import reconcile_active_improvements
+
+        reconcile_active_improvements(self.store)
         trace_authorize(
             tool_name=request.tool_call.tool_name,
             decision=outcome["decision"],

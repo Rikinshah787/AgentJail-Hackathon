@@ -733,6 +733,20 @@ export async function approveImprovementRun(
   return mapImprovementRun(body)
 }
 
+export async function rejectImprovementRun(
+  id: string,
+  reviewer: string,
+  reviewReason: string,
+): Promise<ImprovementRun> {
+  const { res, body } = await request(`${V1}/improvement/runs/${encodeURIComponent(id)}/reject`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ reviewer, review_reason: reviewReason }),
+  })
+  if (!res.ok) throw await toApiError(res, 'Candidate rejection failed')
+  return mapImprovementRun(body)
+}
+
 export async function monitorImprovementRun(id: string): Promise<ImprovementRun> {
   const { res, body } = await request(`${V1}/improvement/runs/${encodeURIComponent(id)}/monitor`, {
     method: 'POST',

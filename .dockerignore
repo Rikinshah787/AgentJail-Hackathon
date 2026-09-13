@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.coverage
+**/*.log
+backend/data
+backend/.env
+notebooks/__marimo__
+.git
+docs

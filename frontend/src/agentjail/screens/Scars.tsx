@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   approveImprovementRun,
   fetchImprovementRuns,
   fetchScars,
   monitorImprovementRun,
+  rejectImprovementRun,
   setScarActive,
   startImprovementRun,
   useResource,
@@ -15,27 +16,21 @@ import { Button, Card, EmptyState, ErrorState, LoadingState, SectionTitle } from
 export function Scars() {
   const scars = useResource(fetchScars)
   const runs = useResource(fetchImprovementRuns)
-  const [items, setItems] = useState<Scar[]>([])
-  const [latest, setLatest] = useState<ImprovementRun | null>(null)
+  const [latestOverride, setLatestOverride] = useState<ImprovementRun | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [reviewer, setReviewer] = useState('security-on-call')
   const [reviewReason, setReviewReason] = useState('Attack and legitimate holdout thresholds passed.')
 
-  useEffect(() => {
-    if (scars.data) setItems(scars.data)
-  }, [scars.data])
-
-  useEffect(() => {
-    if (runs.data?.length) setLatest(runs.data[0])
-  }, [runs.data])
+  const items = scars.data ?? []
+  const latest = latestOverride ?? runs.data?.[0] ?? null
 
   async function perform(action: () => Promise<ImprovementRun>) {
     setBusy(true)
     setMessage('')
     try {
       const result = await action()
-      setLatest(result)
+      setLatestOverride(result)
       await Promise.all([scars.reload(), runs.reload()])
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error))
@@ -101,6 +96,13 @@ export function Scars() {
             >
               Human approve and activate
             </Button>
+            <Button
+              variant="ghost"
+              disabled={busy || !reviewer.trim() || !reviewReason.trim()}
+              onClick={() => void perform(() => rejectImprovementRun(latest.id, reviewer, reviewReason))}
+            >
+              Reject candidate
+            </Button>
           </div>
         ) : null}
 
@@ -127,6 +129,7 @@ export function Scars() {
             <ScarCard
               key={scar.id}
               scar={scar}
+              managed={scar.id === latest?.candidateScarId}
               onStatus={async (active) => {
                 await setScarActive(scar.id, active)
                 await scars.reload()
@@ -156,7 +159,15 @@ function RunEvidence({ run }: { run: ImprovementRun }) {
   )
 }
 
-function ScarCard({ scar, onStatus }: { scar: Scar; onStatus: (active: boolean) => Promise<void> }) {
+function ScarCard({
+  scar,
+  managed,
+  onStatus,
+}: {
+  scar: Scar
+  managed: boolean
+  onStatus: (active: boolean) => Promise<void>
+}) {
   const tone = scar.status === 'Active' ? 'allow' : scar.status === 'Under review' ? 'approve' : 'neutral'
   return (
     <Card hover className="p-5">
@@ -179,9 +190,14 @@ function ScarCard({ scar, onStatus }: { scar: Scar; onStatus: (active: boolean) 
         <Button
           size="sm"
           variant={scar.status === 'Active' ? 'ghost' : 'approve'}
+          disabled={managed && scar.status === 'Under review'}
           onClick={() => void onStatus(scar.status !== 'Active')}
         >
-          {scar.status === 'Active' ? 'Deactivate' : 'Activate manually'}
+          {managed && scar.status === 'Under review'
+            ? 'Use governed review above'
+            : scar.status === 'Active'
+              ? 'Deactivate'
+              : 'Activate manually'}
         </Button>
       </div>
     </Card>

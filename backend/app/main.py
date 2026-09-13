@@ -333,3 +333,27 @@ def aria_coach(enrich: bool = Query(default=True)) -> dict[str, Any]:
         }
     )
     return insight
+
+
+# ---------------------------------------------------------------------------
+# Production static hosting: serve the built React app from the same process.
+# Registered last so every /api route above takes precedence.
+# ---------------------------------------------------------------------------
+import os as _os
+from pathlib import Path as _Path
+
+from fastapi.staticfiles import StaticFiles
+from starlette.responses import FileResponse
+
+_STATIC_DIR = _Path(_os.getenv("AGENTJAIL_STATIC_DIR", _Path(__file__).resolve().parents[2] / "frontend" / "dist"))
+if (_STATIC_DIR / "index.html").exists():
+    app.mount("/assets", StaticFiles(directory=_STATIC_DIR / "assets"), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not found")
+        candidate = _STATIC_DIR / full_path
+        if full_path and candidate.is_file() and candidate.resolve().is_relative_to(_STATIC_DIR.resolve()):
+            return FileResponse(candidate)
+        return FileResponse(_STATIC_DIR / "index.html")

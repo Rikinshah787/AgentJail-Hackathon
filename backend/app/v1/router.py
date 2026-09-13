@@ -5,8 +5,9 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from sqlalchemy import select
 
-from .db import ScarRow, utcnow
+from .db import ImprovementRunRow, ScarRow, utcnow
 from .demo import run_scenario
 from .evaluate import run_harness
 from .gateway import Gateway
@@ -131,12 +132,38 @@ def monitor_improvement(run_id: str):
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@router.post("/improvement/runs/{run_id}/reject")
+def reject_improvement(run_id: str, body: ImprovementReviewRequest):
+    from .improvement_loop import reject_improvement_run
+
+    with session() as db:
+        try:
+            return reject_improvement_run(
+                Store(db),
+                run_id,
+                reviewer=body.reviewer,
+                review_reason=body.review_reason,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Improvement run not found") from exc
+        except (ValueError, PermissionError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.post("/scars/{scar_id}/activate")
 def activate_scar(scar_id: str):
     with session() as db:
         row = db.get(ScarRow, scar_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Scar not found")
+        managed_run = db.scalar(
+            select(ImprovementRunRow).where(ImprovementRunRow.candidate_scar_id == scar_id)
+        )
+        if managed_run is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Loop-generated candidates require the improvement review endpoint.",
+            )
         row.status = "active"
         row.reviewed_by = row.reviewed_by or "demo-reviewer"
         db.commit()

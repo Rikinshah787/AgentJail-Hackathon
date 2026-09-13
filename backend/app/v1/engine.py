@@ -8,6 +8,7 @@ A scar match can raise risk but cannot independently authorize an action.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from time import perf_counter
 from typing import Any, Callable
 
 from .catalog import (
@@ -113,10 +114,11 @@ def authorize(
 ) -> dict[str, Any]:
     """Return a decision dict. Never executes a tool."""
     started = datetime.now(timezone.utc)
+    clock_start = perf_counter()
     now = now or started
     checks: list[CheckResult] = []
     try:
-        return _authorize_inner(request, policies, scars, now, started, policy_fn, checks)
+        return _authorize_inner(request, policies, scars, now, clock_start, policy_fn, checks)
     except Exception:
         # Fail closed: never allow if the policy engine faults.
         return {
@@ -127,12 +129,14 @@ def authorize(
             "matched_scars": [],
             "checks": checks
             + [CheckResult(name="Engine", status="failed", explanation="Unexpected error; default is deny.")],
-            "decision_latency_ms": _latency_ms(started),
+            "decision_latency_ms": _latency_ms(clock_start),
         }
 
 
-def _latency_ms(started: datetime) -> float:
-    return round((datetime.now(timezone.utc) - started).total_seconds() * 1000, 2)
+def _latency_ms(clock_start: float) -> float:
+    # perf_counter has sub-microsecond resolution; datetime.now() is ~1-15ms on Windows
+    # and rounded every pure-Python decision down to 0ms.
+    return round((perf_counter() - clock_start) * 1000, 3)
 
 
 def _authorize_inner(
@@ -140,7 +144,7 @@ def _authorize_inner(
     policies: list[dict[str, Any]],
     scars: list[dict[str, Any]],
     now: datetime,
-    started: datetime,
+    clock_start: float,
     policy_fn: PolicyFn,
     checks: list[CheckResult],
 ) -> dict[str, Any]:
@@ -204,7 +208,7 @@ def _authorize_inner(
             "matched_scars": [],
             "checks": checks
             + [CheckResult(name="Policy engine", status="failed", explanation="Exception during policy evaluation.")],
-            "decision_latency_ms": _latency_ms(started),
+            "decision_latency_ms": _latency_ms(clock_start),
         }
     checks.extend(policy_checks)
 
@@ -265,7 +269,7 @@ def _authorize_inner(
         "policy_ids": policy_ids,
         "matched_scars": [m.model_dump() if isinstance(m, ScarMatch) else m for m in matched],
         "checks": [c.model_dump() if isinstance(c, CheckResult) else c for c in checks],
-        "decision_latency_ms": _latency_ms(started),
+        "decision_latency_ms": _latency_ms(clock_start),
     }
 
 

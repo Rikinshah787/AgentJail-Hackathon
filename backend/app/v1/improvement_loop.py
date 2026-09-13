@@ -12,7 +12,9 @@ from datetime import datetime, timezone
 from threading import Lock
 from typing import Any, Callable
 
-from .db import utcnow
+from sqlalchemy import select
+
+from .db import ImprovementRunRow, utcnow
 from .engine import authorize
 from .schemas import ActorIn, AuthorizeRequest, SourceIn, ToolCallIn
 from .seed import AGENT_ID, BOT_ID, HUMAN_ID
@@ -311,6 +313,37 @@ def approve_improvement_run(
     return row_to_dict(run)
 
 
+def reject_improvement_run(
+    store: Store, run_id: str, *, reviewer: str, review_reason: str
+) -> dict[str, Any]:
+    reviewer = reviewer.strip()[:120]
+    review_reason = review_reason.strip()[:1000]
+    if not reviewer or not review_reason:
+        raise ValueError("A named reviewer and review reason are required.")
+    run = store.get_improvement_run(run_id)
+    if run is None:
+        raise KeyError("improvement_run_not_found")
+    if run.status != "awaiting_human":
+        raise PermissionError("improvement_run_not_awaiting_human")
+    scar = store.get_scar(str(run.candidate_scar_id))
+    if scar is None or scar.status != "under_review":
+        raise PermissionError("candidate_scar_not_reviewable")
+    now = utcnow()
+    scar.status = "inactive"
+    scar.reviewed_by = reviewer
+    run.status = "rejected"
+    run.reviewer = reviewer
+    run.review_reason = review_reason
+    run.stop_reason = "A human reviewer rejected the candidate scar."
+    run.completed_at = now
+    run.history = [
+        *(run.history or []),
+        {"phase": "human_rejection", "reviewer": reviewer, "at": now.isoformat()},
+    ]
+    store.commit()
+    return row_to_dict(run)
+
+
 def monitor_improvement_run(
     store: Store, run_id: str, *, generator: Generator | None = None
 ) -> dict[str, Any]:
@@ -363,3 +396,42 @@ def monitor_improvement_run(
     ]
     store.commit()
     return row_to_dict(run)
+
+
+def reconcile_active_improvements(store: Store) -> list[str]:
+    """Cheap regulator pass after gateway traffic; performs no model calls."""
+    rolled_back: list[str] = []
+    runs = store.session.scalars(
+        select(ImprovementRunRow).where(ImprovementRunRow.status == "active")
+    ).all()
+    now = utcnow()
+    for run in runs:
+        scar = store.get_scar(str(run.candidate_scar_id))
+        if scar is None or scar.status != "active":
+            continue
+        observed = store.scar_decisions_since(scar.id, run.activated_at)
+        false_positives = [item for item in observed if item["decision"] != "deny"]
+        if not false_positives:
+            continue
+        scar.status = "inactive"
+        run.status = "rolled_back"
+        run.completed_at = now
+        run.stop_reason = "Live reconciliation detected a non-deny scar match; candidate was quarantined."
+        run.monitor_metrics = {
+            **(run.monitor_metrics or {}),
+            "observed_matches": len(observed),
+            "observed_false_positives": len(false_positives),
+        }
+        run.history = [
+            *(run.history or []),
+            {
+                "phase": "live_reconciliation",
+                "at": now.isoformat(),
+                "observed_false_positives": len(false_positives),
+                "rolled_back": True,
+            },
+        ]
+        rolled_back.append(run.id)
+    if rolled_back:
+        store.commit()
+    return rolled_back

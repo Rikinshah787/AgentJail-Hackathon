@@ -287,6 +287,20 @@ class ImprovementLoopApiTests(unittest.TestCase):
             self.assertEqual(history.status_code, 200)
             self.assertEqual(history.json()[0]["id"], run["id"])
 
+            second = self.client.post(
+                "/api/v1/improvement/runs",
+                json={"max_iterations": 3, "min_unique_variants": 2},
+            ).json()
+            rejected = self.client.post(
+                f"/api/v1/improvement/runs/{second['id']}/reject",
+                json={
+                    "reviewer": "security-on-call",
+                    "review_reason": "Candidate is unnecessary for this environment.",
+                },
+            )
+            self.assertEqual(rejected.status_code, 200)
+            self.assertEqual(rejected.json()["status"], "rejected")
+
 
 if __name__ == "__main__":
     unittest.main()

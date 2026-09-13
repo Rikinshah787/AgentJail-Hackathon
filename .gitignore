@@ -23,3 +23,6 @@ notebooks/__marimo__/
 Thumbs.db
 .vscode/
 .idea/
+
+# Coverage output
+.coverage

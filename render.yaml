@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: agentjail
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: AGENTJAIL_EXECUTOR
+        value: mock
+      - key: WEAVE_PROJECT
+        value: rshah88-arizona-state-university/agent-jail
+      - key: ARIA_COACH_MODEL
+        value: zai-org/GLM-5.3-Flash
+      - key: WANDB_API_KEY
+        sync: false
