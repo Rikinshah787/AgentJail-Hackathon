@@ -11,6 +11,7 @@ from app.v1.improvement_loop import (
     ImprovementConfig,
     approve_improvement_run,
     monitor_improvement_run,
+    reject_improvement_run,
     run_improvement_cycle,
 )
 from app.v1.seed import seed
@@ -140,6 +141,26 @@ class ImprovementLoopTests(unittest.TestCase):
         self.assertEqual(monitored["status"], "rolled_back")
         self.assertEqual(self.store.get_scar(scar_id).status, "inactive")
         self.assertEqual(monitored["monitor_metrics"]["observed_false_positives"], 1)
+
+    def test_human_can_reject_a_candidate_and_it_cannot_be_activated(self) -> None:
+        run = run_improvement_cycle(self.store, generator=_proposal)
+
+        rejected = reject_improvement_run(
+            self.store,
+            run["id"],
+            reviewer="security-on-call",
+            review_reason="Candidate scope is too broad.",
+        )
+
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(self.store.get_scar(run["candidate_scar_id"]).status, "inactive")
+        with self.assertRaises(PermissionError):
+            approve_improvement_run(
+                self.store,
+                run["id"],
+                reviewer="security-on-call",
+                review_reason="Try to activate after rejection.",
+            )
 
     def test_config_rejects_an_unbounded_generation_budget(self) -> None:
         with self.assertRaises(ValueError):
