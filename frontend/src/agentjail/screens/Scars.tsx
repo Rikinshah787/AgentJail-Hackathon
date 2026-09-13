@@ -143,7 +143,7 @@ export function Scars() {
 }
 
 function RunEvidence({ run }: { run: ImprovementRun }) {
-  const metrics = run.monitorMetrics && Object.keys(run.monitorMetrics).length ? run.monitorMetrics : run.metrics
+  const metrics = Number.isFinite(run.monitorMetrics?.attack_block_rate) ? run.monitorMetrics : run.metrics
   return (
     <div className="mt-4">
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
