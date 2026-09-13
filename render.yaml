@@ -9,7 +9,7 @@ services:
     autoDeploy: true
     envVars:
       - key: AGENTJAIL_EXECUTOR
-        value: mock
+        value: coreweave
       - key: WEAVE_PROJECT
         value: rshah88-arizona-state-university/agent-jail
       - key: ARIA_COACH_MODEL
