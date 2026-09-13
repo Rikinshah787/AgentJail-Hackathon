@@ -7,6 +7,7 @@ from unittest.mock import patch
 from app.v1.db import Base, make_engine, make_session_factory
 from app.v1.executor import ToolExecutionError
 from app.v1.gateway import Gateway
+from app.v1.demo import run_scenario
 from app.v1.schemas import ActorIn, AuthorizeRequest, SourceIn, ToolCallIn
 from app.v1.store import Store
 
@@ -212,6 +213,43 @@ class GatewaySandboxBoundaryTests(unittest.TestCase):
         self.assertFalse(decision.executed)
         self.assertEqual(decision.execution_result["status"], "failed")
         self.assertEqual(len(_FakeSandbox.run_calls), 1)
+
+
+class DemoSandboxIntegrationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        _FakeSandbox.reset()
+        from app.v1.coreweave_executor import CoreWeaveSandboxExecutor
+
+        engine = make_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        self.session = make_session_factory(engine)()
+        self.store = Store(self.session)
+        self.executor = CoreWeaveSandboxExecutor(
+            sandbox_cls=_FakeSandbox,
+            auth_strategy=_FakeAuthStrategy,
+            network_options_cls=_FakeNetworkOptions,
+        )
+
+    def tearDown(self) -> None:
+        self.session.close()
+
+    def test_demo_proves_breach_runs_in_sandbox_but_deny_creates_nothing(self) -> None:
+        breach = run_scenario(self.store, "unprotected_poisoned_ticket", self.executor)
+        protected = run_scenario(self.store, "protected_poisoned_ticket", self.executor)
+
+        self.assertEqual(breach["decision"]["execution_result"]["provider"], "coreweave_sandbox")
+        self.assertTrue(breach["decision"]["execution_result"]["sandbox_created"])
+        self.assertEqual(protected["decision"]["decision"], "deny")
+        self.assertFalse(protected["decision"]["executed"])
+        self.assertEqual(len(_FakeSandbox.run_calls), 1)
+
+    def test_legitimate_demo_runs_safe_restart_in_sandbox(self) -> None:
+        result = run_scenario(self.store, "legitimate_sensitive_request", self.executor)
+
+        self.assertEqual(result["decision"]["decision"], "allow")
+        self.assertTrue(result["decision"]["executed"])
+        self.assertEqual(result["decision"]["execution_result"]["provider"], "coreweave_sandbox")
+        self.assertEqual(result["proposed_tool"]["tool_name"], "restart_service")
 
 
 class RuntimeSelectionTests(unittest.TestCase):
