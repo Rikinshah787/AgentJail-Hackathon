@@ -29,7 +29,11 @@ def build_executor() -> ToolExecutor:
         from .coreweave_executor import CoreWeaveSandboxExecutor
 
         return CoreWeaveSandboxExecutor()
-    raise RuntimeError("AGENTJAIL_EXECUTOR must be 'mock' or 'coreweave'.")
+    if mode == "arga":
+        from .arga_executor import ArgaTwinExecutor
+
+        return ArgaTwinExecutor()
+    raise RuntimeError("AGENTJAIL_EXECUTOR must be 'mock', 'coreweave', or 'arga'.")
 
 
 _executor: ToolExecutor = build_executor()

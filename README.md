@@ -151,6 +151,26 @@ The model cannot submit arbitrary shell source. AgentJail allowlists the tool na
 
 Supported sandbox demo tools are `create_service_identity`, `restart_service`, `send_email`, and `post_webhook`. Their effects are simulations inside the evaluation boundary; they do not call production IAM, email, webhook, or infrastructure APIs.
 
+## Arga Labs twin executor
+
+A third executor runs allowed calls against an [Arga Labs](https://www.argalabs.com/) stateful **twin** of GitHub, which speaks the real GitHub REST API. It is the closest thing to production execution that is still safe to demo, and the twin's own state doubles as independent evidence:
+
+| AgentJail tool | GitHub twin request | Evidence read back |
+| --- | --- | --- |
+| `create_service_identity` (administrator) | `PUT /repos/{owner}/{repo}/collaborators/{login}` with `admin` | Collaborator list before and after |
+| `restart_service` | `POST /repos/{owner}/{repo}/dispatches` (`restart_service` event) | Ledger entry with HTTP status |
+| `post_webhook` | `POST /repos/{owner}/{repo}/hooks` | Hook list before and after |
+
+Denied calls provision nothing and send nothing. Unmapped tools fail closed. The Arga API key and the twin token never leave the backend process and are redacted from every ledger entry and result.
+
+```powershell
+$env:AGENTJAIL_EXECUTOR="arga"
+$env:ARGA_API_KEY="arga_sk_..."
+$env:ARGA_GITHUB_TOKEN="..."   # from the twin page in the Arga web app if your plan returns no env_vars
+```
+
+The executor provisions a GitHub twin on the first allowed call (10-minute TTL on the free plan), reuses it for the session, and tears it down on exit. Set `ARGA_RUN_ID` to attach to a twin you provisioned yourself. Boundary tests in `backend/tests/test_arga_executor.py` run fully offline against a mocked Arga API and twin.
+
 ## Screens
 
 | Surface | What it proves |
