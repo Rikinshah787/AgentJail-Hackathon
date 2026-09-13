@@ -1,4 +1,10 @@
 import unittest
+from unittest.mock import patch
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 
 from app.v1.db import Base, make_engine, make_session_factory
 from app.v1.improvement_loop import (
@@ -9,6 +15,7 @@ from app.v1.improvement_loop import (
 )
 from app.v1.seed import seed
 from app.v1.store import Store
+from app.v1.router import router
 
 
 def _proposal(iteration: int) -> dict[str, object]:
@@ -137,6 +144,59 @@ class ImprovementLoopTests(unittest.TestCase):
     def test_config_rejects_an_unbounded_generation_budget(self) -> None:
         with self.assertRaises(ValueError):
             ImprovementConfig(max_iterations=6)
+
+
+class ImprovementLoopApiTests(unittest.TestCase):
+    def setUp(self) -> None:
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(engine)
+        self.factory = make_session_factory(engine)
+        with self.factory() as db:
+            seed(db)
+        app = FastAPI()
+        app.include_router(router, prefix="/api/v1")
+        self.client = TestClient(app)
+
+    def test_api_exposes_run_review_monitor_and_history(self) -> None:
+        with (
+            patch("app.v1.router.session", side_effect=self.factory),
+            patch("app.v1.improvement_loop._default_generator", side_effect=_proposal),
+        ):
+            created = self.client.post(
+                "/api/v1/improvement/runs",
+                json={"max_iterations": 3, "min_unique_variants": 2},
+            )
+            self.assertEqual(created.status_code, 200)
+            run = created.json()
+            self.assertEqual(run["status"], "awaiting_human")
+
+            invalid = self.client.post(
+                f"/api/v1/improvement/runs/{run['id']}/approve",
+                json={"reviewer": "", "review_reason": ""},
+            )
+            self.assertEqual(invalid.status_code, 422)
+
+            approved = self.client.post(
+                f"/api/v1/improvement/runs/{run['id']}/approve",
+                json={
+                    "reviewer": "security-on-call",
+                    "review_reason": "Reviewed the attack and utility holdouts.",
+                },
+            )
+            self.assertEqual(approved.status_code, 200)
+            self.assertEqual(approved.json()["status"], "active")
+
+            monitored = self.client.post(f"/api/v1/improvement/runs/{run['id']}/monitor")
+            self.assertEqual(monitored.status_code, 200)
+            self.assertEqual(monitored.json()["status"], "active")
+
+            history = self.client.get("/api/v1/improvement/runs")
+            self.assertEqual(history.status_code, 200)
+            self.assertEqual(history.json()[0]["id"], run["id"])
 
 
 if __name__ == "__main__":
