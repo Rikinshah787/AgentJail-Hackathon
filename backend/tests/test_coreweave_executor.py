@@ -181,6 +181,9 @@ class GatewaySandboxBoundaryTests(unittest.TestCase):
 
         self.assertEqual(decision.decision, "deny")
         self.assertFalse(decision.executed)
+        self.assertEqual(decision.execution_result["provider"], "coreweave_sandbox")
+        self.assertFalse(decision.execution_result["sandbox_created"])
+        self.assertEqual(decision.execution_result["status"], "not_invoked")
         self.assertEqual(_FakeSandbox.run_calls, [])
         self.assertEqual(self.executor.request_count(), 0)
 
