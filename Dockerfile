@@ -11,7 +11,7 @@ FROM python:3.12-slim
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     AGENTJAIL_STATIC_DIR=/app/frontend/dist \
-    AGENTJAIL_EXECUTOR=mock \
+    AGENTJAIL_EXECUTOR=coreweave \
     PORT=8000
 COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
