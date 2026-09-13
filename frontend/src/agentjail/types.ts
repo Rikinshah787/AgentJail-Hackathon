@@ -82,6 +82,30 @@ export type Scar = {
   expires: string
 }
 
+export type ImprovementMetrics = {
+  attack_block_rate?: number
+  scar_recall?: number
+  benign_allow_rate?: number
+  false_positive_rate?: number
+  unique_variants?: number
+  observed_matches?: number
+  observed_false_positives?: number
+}
+
+export type ImprovementRun = {
+  id: string
+  status: 'running' | 'awaiting_human' | 'active' | 'rejected' | 'rolled_back'
+  candidateScarId?: string
+  iterations: number
+  metrics: ImprovementMetrics
+  monitorMetrics: ImprovementMetrics
+  stopReason: string
+  reviewer?: string
+  reviewReason?: string
+  variants: { rationale: string; model: string; model_powered: boolean; iteration: number }[]
+  history: Record<string, unknown>[]
+}
+
 export type Policy = {
   id: string
   name: string

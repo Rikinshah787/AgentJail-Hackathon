@@ -22,6 +22,7 @@ import type {
   DemoScenarioId,
   EvalSnapshot,
   Incident,
+  ImprovementRun,
   Policy,
   RiskLevel,
   Scar,
@@ -545,6 +546,49 @@ function mapScar(raw: unknown, index: number): Scar {
   }
 }
 
+function mapImprovementRun(raw: unknown): ImprovementRun {
+  const item = isRecord(raw) ? raw : {}
+  const metrics = isRecord(item.metrics) ? item.metrics : {}
+  const monitor = isRecord(item.monitor_metrics) ? item.monitor_metrics : {}
+  const variants = Array.isArray(item.variants) ? item.variants : []
+  const history = Array.isArray(item.history) ? item.history.filter(isRecord) : []
+  return {
+    id: str(item.id),
+    status: str(item.status, 'rejected') as ImprovementRun['status'],
+    candidateScarId: str(item.candidate_scar_id) || undefined,
+    iterations: num(item.iterations),
+    metrics: {
+      attack_block_rate: num(metrics.attack_block_rate, NaN),
+      scar_recall: num(metrics.scar_recall, NaN),
+      benign_allow_rate: num(metrics.benign_allow_rate, NaN),
+      false_positive_rate: num(metrics.false_positive_rate, NaN),
+      unique_variants: num(metrics.unique_variants, NaN),
+    },
+    monitorMetrics: {
+      attack_block_rate: num(monitor.attack_block_rate, NaN),
+      scar_recall: num(monitor.scar_recall, NaN),
+      benign_allow_rate: num(monitor.benign_allow_rate, NaN),
+      false_positive_rate: num(monitor.false_positive_rate, NaN),
+      unique_variants: num(monitor.unique_variants, NaN),
+      observed_matches: num(monitor.observed_matches, NaN),
+      observed_false_positives: num(monitor.observed_false_positives, NaN),
+    },
+    stopReason: str(item.stop_reason),
+    reviewer: str(item.reviewer) || undefined,
+    reviewReason: str(item.review_reason) || undefined,
+    variants: variants.map((rawVariant, index) => {
+      const variant = isRecord(rawVariant) ? rawVariant : {}
+      return {
+        rationale: str(variant.rationale),
+        model: str(variant.model, 'deterministic-fallback'),
+        model_powered: bool(variant.model_powered),
+        iteration: num(variant.iteration, index + 1),
+      }
+    }),
+    history,
+  }
+}
+
 function mapPolicy(raw: unknown, index: number): Policy {
   const item = isRecord(raw) ? raw : {}
   const effect = str(item.effect ?? item.decision, 'approval_required').toLowerCase()
@@ -646,6 +690,56 @@ export async function fetchScars(): Promise<Resource<Scar[]>> {
   const result = await getV1('scars')
   if (result.missing) return { source: 'demo', data: SCARS }
   return { source: 'live', data: asArray(result.body, ['scars', 'items', 'data']).map(mapScar) }
+}
+
+export async function setScarActive(id: string, active: boolean): Promise<void> {
+  const { res } = await request(`${V1}/scars/${encodeURIComponent(id)}/${active ? 'activate' : 'deactivate'}`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) throw await toApiError(res, `Could not ${active ? 'activate' : 'deactivate'} scar`)
+}
+
+export async function fetchImprovementRuns(): Promise<Resource<ImprovementRun[]>> {
+  const result = await getV1('improvement/runs')
+  if (result.missing) return { source: 'demo', data: [] }
+  return {
+    source: 'live',
+    data: asArray(result.body, ['runs', 'items', 'data']).map(mapImprovementRun),
+  }
+}
+
+export async function startImprovementRun(): Promise<ImprovementRun> {
+  const { res, body } = await request(`${V1}/improvement/runs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ max_iterations: 3, min_unique_variants: 2 }),
+  })
+  if (!res.ok) throw await toApiError(res, 'Improvement cycle failed')
+  return mapImprovementRun(body)
+}
+
+export async function approveImprovementRun(
+  id: string,
+  reviewer: string,
+  reviewReason: string,
+): Promise<ImprovementRun> {
+  const { res, body } = await request(`${V1}/improvement/runs/${encodeURIComponent(id)}/approve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ reviewer, review_reason: reviewReason }),
+  })
+  if (!res.ok) throw await toApiError(res, 'Candidate activation failed')
+  return mapImprovementRun(body)
+}
+
+export async function monitorImprovementRun(id: string): Promise<ImprovementRun> {
+  const { res, body } = await request(`${V1}/improvement/runs/${encodeURIComponent(id)}/monitor`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) throw await toApiError(res, 'Regression monitor failed')
+  return mapImprovementRun(body)
 }
 
 export async function fetchPolicies(): Promise<Resource<Policy[]>> {
