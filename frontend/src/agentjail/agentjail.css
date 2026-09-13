@@ -1,0 +1,197 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap");
+
+@layer theme, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --color-aj-bg: #090b10;
+  --color-aj-panel: #0d1017;
+  --color-aj-card: #121722;
+  --color-aj-border: #273044;
+  --color-aj-muted: #9ba7ba;
+  --color-aj-text: #f5f7fb;
+  --color-aj-brand: #80a7ff;
+  --color-aj-brand-dim: #5d83d9;
+  --color-aj-allow: #34d399;
+  --color-aj-block: #f87171;
+  --color-aj-cream: #f59e0b;
+  --color-aj-approve: #fbbf24;
+}
+
+.agentjail-root {
+  font-family: var(--font-sans);
+  color: var(--color-aj-text);
+  isolation: isolate;
+  overflow-x: clip;
+  background: #090b10;
+  min-height: 100vh;
+}
+
+:where(.agentjail-root),
+:where(.agentjail-root) *,
+:where(.agentjail-root) *::before,
+:where(.agentjail-root) *::after {
+  box-sizing: border-box;
+}
+
+:where(.agentjail-root) :where(h1, h2, h3, p) {
+  margin: 0;
+}
+
+:where(.agentjail-root) :where(button, select, textarea) {
+  font: inherit;
+}
+
+:where(.agentjail-root) button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+:where(.agentjail-root) button:disabled {
+  cursor: not-allowed;
+}
+
+:where(.agentjail-root) :where(h1, h2, h3, .font-display) {
+  font-family: var(--font-display);
+  letter-spacing: -0.025em;
+}
+
+.agentjail-root button:focus-visible,
+.agentjail-root select:focus-visible,
+.agentjail-root textarea:focus-visible,
+.agentjail-root a:focus-visible {
+  outline: 2px solid rgba(123, 136, 255, 0.85);
+  outline-offset: 2px;
+}
+
+@keyframes aj-flow-pulse {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: translateX(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(3px);
+  }
+}
+
+@keyframes aj-shield-in {
+  0% {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.02);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes aj-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(123, 136, 255, 0.22);
+  }
+  50% {
+    box-shadow: 0 0 22px 2px rgba(123, 136, 255, 0.22);
+  }
+}
+
+@keyframes aj-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes aj-scan {
+  0% {
+    transform: translateY(-40%);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: translateY(220%);
+    opacity: 0;
+  }
+}
+
+.aj-flow-arrow {
+  animation: aj-flow-pulse 2.6s ease-in-out infinite;
+}
+
+.aj-shield-pop {
+  animation: aj-shield-in 0.55s ease-out both;
+}
+
+.aj-brand-glow { animation: none; }
+
+.aj-page {
+  animation: aj-enter 0.38s ease-out both;
+}
+
+.aj-malicious-hl {
+  background: linear-gradient(90deg, rgba(248, 113, 113, 0.28), rgba(248, 113, 113, 0.07));
+  border-left: 3px solid #f87171;
+}
+
+.aj-scan-line {
+  position: absolute;
+  inset-inline: 0;
+  height: 42%;
+  background: linear-gradient(180deg, transparent, rgba(123, 136, 255, 0.18), transparent);
+  animation: aj-scan 4.8s ease-in-out infinite;
+}
+
+.aj-card-hover {
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.aj-card-hover:hover {
+  transform: translateY(-1px);
+  border-color: rgba(128, 167, 255, 0.48);
+  box-shadow: none;
+}
+
+@media (max-width: 639px) {
+  .agentjail-root {
+    background:
+      radial-gradient(ellipse 110% 38% at 15% -6%, rgba(123, 136, 255, 0.18), transparent 62%),
+      #070b14;
+  }
+
+  .agentjail-root .aj-card-hover:hover {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agentjail-root *,
+  .agentjail-root *::before,
+  .agentjail-root *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

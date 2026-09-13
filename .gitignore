@@ -1,0 +1,25 @@
+# Dependencies and generated artifacts
+frontend/node_modules/
+frontend/dist/
+backend/.venv/
+__pycache__/
+*.py[cod]
+*.tsbuildinfo
+
+# Local state and logs
+backend/data/
+notebooks/__marimo__/
+*.log
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

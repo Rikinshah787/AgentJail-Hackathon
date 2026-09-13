@@ -1,0 +1,7 @@
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+weave==0.53.9
+openai==3.13.0
+python-dotenv==1.1.1
+sqlalchemy==2.0.43
+pytest==8.4.2
