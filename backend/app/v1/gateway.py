@@ -53,7 +53,16 @@ class Gateway:
         before_n = self.executor.request_count()
         before_state = self.executor.snapshot()["state"]
         executed = False
-        execution_result = None
+        execution_result: dict[str, Any] | None = {
+            "provider": self.executor.provider,
+            "sandbox_created": False,
+            "status": "not_invoked",
+            "reason": (
+                "Executor invocation was disabled for this authorization check."
+                if not execute
+                else "Authorization did not allow executor invocation."
+            ),
+        }
         if execute and outcome["decision"] == "allow":
             try:
                 execution_result = self.executor.execute(
@@ -125,6 +134,11 @@ class Gateway:
             matched_scars=matched_ids,
             scenario="gateway.authorize",
             checks=to_plain(outcome.get("checks") or []),
+            executor_provider=str(execution_result.get("provider") or self.executor.provider),
+            sandbox_created=bool(execution_result.get("sandbox_created")),
+            sandbox_id=execution_result.get("sandbox_id"),
+            execution_status=str(execution_result.get("status") or "unknown"),
+            execution_duration_ms=execution_result.get("duration_ms"),
         )
         user_msg = request.user_instruction or request.retrieved_content or request.tool_call.tool_name
         trace_agent_action(

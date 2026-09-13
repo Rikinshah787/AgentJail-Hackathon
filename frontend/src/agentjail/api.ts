@@ -173,7 +173,16 @@ function parseDemoRun(payload: unknown): DemoRunResult {
   const protectedSide = pickNested(root, ['protected', 'protected_result', 'jail', 'incident'])
   const src = isRecord(protectedSide) ? protectedSide : root
   const decisionObj = isRecord(src.decision) ? src.decision : src
-  const toolObj = isRecord(src.tool_call) ? src.tool_call : src
+  const toolObj = isRecord(src.tool_call)
+    ? src.tool_call
+    : isRecord(src.proposed_tool)
+      ? src.proposed_tool
+      : src
+  const execution = isRecord(decisionObj.execution_result)
+    ? decisionObj.execution_result
+    : isRecord(src.execution_result)
+      ? src.execution_result
+      : {}
   const matched =
     bool(src.matched_scar) ||
     bool(decisionObj.matched_scar) ||
@@ -207,17 +216,23 @@ function parseDemoRun(payload: unknown): DemoRunResult {
     checks: mapChecks(decisionObj.checks ?? src.checks),
     pendingId: str(src.pending_id ?? root.pending_id) || undefined,
     incidentId: str(src.id ?? root.incident_id) || undefined,
+    executorProvider: str(execution.provider) || undefined,
+    sandboxCreated: execution.sandbox_created == null ? undefined : bool(execution.sandbox_created),
+    sandboxId: str(execution.sandbox_id) || undefined,
+    executionDurationMs: num(execution.duration_ms, NaN) || undefined,
   }
 }
 
 export async function runDemoScenario(id: DemoScenarioId): Promise<DemoRunResult> {
+  let unprotectedSandboxId: string | undefined
   if (id === 'poisoned') {
     try {
-      await request(`${V1}/demo/run`, {
+      const { res, body } = await request(`${V1}/demo/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ scenario: 'unprotected_poisoned_ticket' }),
       })
+      if (res.ok) unprotectedSandboxId = parseDemoRun(body).sandboxId
     } catch {
       /* unprotected run is illustrative; the jail result is the source of truth */
     }
@@ -229,7 +244,7 @@ export async function runDemoScenario(id: DemoScenarioId): Promise<DemoRunResult
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ scenario: V1_SCENARIO[id] }),
     })
-    if (res.ok) return parseDemoRun(body)
+    if (res.ok) return { ...parseDemoRun(body), unprotectedSandboxId }
     if (res.status !== 404) {
       throw new ApiError('Scenario failed to complete', {
         status: res.status,

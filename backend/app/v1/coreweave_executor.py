@@ -66,11 +66,21 @@ def _safe_parameters(parameters: dict[str, Any]) -> dict[str, Any]:
 
 
 def _redacted_parameters(parameters: dict[str, Any]) -> dict[str, Any]:
-    sensitive = {"api_key", "password", "secret", "token", "authorization"}
-    return {
-        str(key): "[REDACTED]" if str(key).lower() in sensitive else value
-        for key, value in parameters.items()
-    }
+    sensitive_fragments = ("api_key", "apikey", "password", "secret", "token", "authorization")
+
+    def redact(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                str(key): "[REDACTED]"
+                if any(fragment in str(key).lower() for fragment in sensitive_fragments)
+                else redact(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [redact(item) for item in value]
+        return value
+
+    return redact(parameters)
 
 
 def _bounded_text(value: Any) -> str:
@@ -173,7 +183,7 @@ class CoreWeaveSandboxExecutor:
                     check=True,
                 ).result()
             stdout = _bounded_text(getattr(process_result, "stdout", ""))
-            stderr = _bounded_text(getattr(process_result, "stderr", ""))
+            stderr_present = bool(_bounded_text(getattr(process_result, "stderr", "")))
             returncode = int(getattr(process_result, "returncode", 1))
             if returncode != 0:
                 raise RuntimeError("Sandbox command returned a non-zero status.")
@@ -194,7 +204,9 @@ class CoreWeaveSandboxExecutor:
                 "returncode": returncode,
                 "duration_ms": duration_ms,
                 "stdout": parsed,
-                "stderr": stderr,
+                # The fixed runner does not use stderr as a result channel. Never
+                # return it verbatim because SDK/runtime errors may contain secrets.
+                "stderr_present": stderr_present,
                 "message": f"CoreWeave Sandbox executed {tool_name}",
             }
         except Exception as exc:

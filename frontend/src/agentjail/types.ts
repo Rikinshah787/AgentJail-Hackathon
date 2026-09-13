@@ -125,6 +125,11 @@ export type DemoRunResult = {
   checks: DemoCheck[]
   pendingId?: string
   incidentId?: string
+  executorProvider?: string
+  sandboxCreated?: boolean
+  sandboxId?: string
+  executionDurationMs?: number
+  unprotectedSandboxId?: string
 }
 
 export type EvalSnapshot = {

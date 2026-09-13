@@ -151,6 +151,33 @@ class CoreWeaveSandboxExecutorTests(unittest.TestCase):
         self.assertEqual(self.executor.request_count(), 1)
         self.assertEqual(self.executor.ledger()[0]["status"], "failed")
 
+    def test_ledger_recursively_redacts_secrets_and_hides_stderr(self) -> None:
+        _FakeSandbox.output = {"status": "ok", "effect": "recorded"}
+        original_exec = _FakeSandbox.exec
+
+        def exec_with_stderr(instance, command, **kwargs):
+            type(instance).exec_calls.append({"command": command, **kwargs})
+            return _FakeProcess(type(instance).output, stderr="credential=must-not-escape")
+
+        _FakeSandbox.exec = exec_with_stderr
+        try:
+            result = self.executor.execute(
+                "post_webhook",
+                {
+                    "destination": "audit",
+                    "nested": {"access_token": "super-secret"},
+                },
+            )
+        finally:
+            _FakeSandbox.exec = original_exec
+
+        self.assertEqual(
+            self.executor.ledger()[0]["parameters"]["nested"]["access_token"],
+            "[REDACTED]",
+        )
+        self.assertTrue(result["stderr_present"])
+        self.assertNotIn("must-not-escape", json.dumps(result))
+
 
 class GatewaySandboxBoundaryTests(unittest.TestCase):
     def setUp(self) -> None:

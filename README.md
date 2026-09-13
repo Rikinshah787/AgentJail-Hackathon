@@ -59,10 +59,10 @@ This is deliberately safe to demo.
 
 - **Authorization boundary:** `Gateway.authorize()` is the sole decision point before execution.
 - **Persistence:** incidents, decisions, approvals, policies, scars, and tool-call records live in SQLite.
-- **Safety proof:** denied calls are checked against an independent executor ledger.
+- **Safety proof:** denied calls are checked against an independent executor ledger and create zero CoreWeave sandboxes.
 - **Evaluation:** fixed probes, mutation replay, and InjecAgent mapping fail closed for unmapped tools.
 - **Observability:** W&B Weave records nested traces, agent tool spans, and evaluation rows when configured.
-- **Safe execution:** the Control Room uses a controlled `MockExecutor`; it never targets real cloud IAM.
+- **Safe execution:** allowed demo actions can run inside short-lived, network-isolated CoreWeave Sandboxes. Tool effects remain simulated and never target real IAM.
 
 An optional local `kind` lab exists for a narrowly scoped Kubernetes rollout restart of `gpu-worker-12`. It is not the default Control Room executor and must not be described as production cloud access.
 
@@ -79,7 +79,7 @@ FastAPI v1 authorization runtime
   ├─ Policy / provenance / risk engine
   ├─ Scar matcher + candidate-scar workflow
   ├─ Approval workflow + SQLite event store
-  ├─ Controlled executor + independent ledger
+  ├─ CoreWeave Sandbox executor + independent ledger
   └─ Weave tracing + EvaluationLogger
 ```
 
@@ -92,7 +92,14 @@ Set these only locally — never commit them:
 ```powershell
 $env:WANDB_API_KEY="your-key"
 $env:WEAVE_PROJECT="your-team/agent-jail"
+$env:AGENTJAIL_EXECUTOR="coreweave"
 ```
+
+`AGENTJAIL_EXECUTOR=mock` keeps the deterministic offline executor. In
+`coreweave` mode, the W&B credential authenticates sandbox creation from the
+backend only; it is never injected into the sandbox or exposed to the browser.
+Each allowed call receives a fresh sandbox ID, while denied calls create no
+sandbox and send no execution request.
 
 ## Run locally
 

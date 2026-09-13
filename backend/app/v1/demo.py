@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .db import utcnow
-from .executor import MockExecutor
+from .executor import ToolExecutor
 from .gateway import Gateway
 from .schemas import ActorIn, AuthorizeRequest, SourceIn, ToolCallIn
 from .seed import AGENT_ID, BOT_ID, HUMAN_ID
@@ -69,24 +69,24 @@ def _legitimate_request() -> AuthorizeRequest:
             id=HUMAN_ID,
             display_name="Jordan (verified operator)",
             actor_type="human",
-            roles=["operator", "identity_manager"],
+            roles=["operator"],
             verified=True,
         ),
         source=SourceIn(
-            source_type="api",
-            display_name="Signed change request",
+            source_type="alert",
+            display_name="Signed monitoring alert",
             verified=True,
             verification_method="cryptographic_signature",
             trust_level="trusted",
         ),
         tool_call=ToolCallIn(
-            tool_name="create_service_identity",
-            action="create",
-            resource="service_identity",
-            parameters={"role": "temporary-ops", "duration": "1h"},
+            tool_name="restart_service",
+            action="restart",
+            resource="gpu-worker-3",
+            parameters={"service": "gpu-worker-3", "blast_radius": "one_service"},
         ),
-        user_instruction="Create a temporary service identity for the change window.",
-        retrieved_content="Verified operator requested a short-lived operations identity.",
+        user_instruction="Restart gpu-worker-3 after a verified monitoring alert.",
+        retrieved_content="Signed alert scoped to one degraded GPU worker.",
     )
 
 
@@ -114,7 +114,7 @@ def _timeline(request: AuthorizeRequest, decision: Any, mode: str) -> list[dict[
     ]
 
 
-def run_scenario(store: Store, scenario: str, executor: MockExecutor) -> dict[str, Any]:
+def run_scenario(store: Store, scenario: str, executor: ToolExecutor) -> dict[str, Any]:
     started = utcnow()
     gateway = Gateway(store, executor)
     try:
@@ -146,13 +146,21 @@ def run_scenario(store: Store, scenario: str, executor: MockExecutor) -> dict[st
         return {"status": "failed", "error": str(exc), "incident_id": inc.id, "scenario": scenario}
 
 
-def _run_unprotected(store: Store, executor: MockExecutor, started: datetime) -> dict[str, Any]:
+def _run_unprotected(store: Store, executor: ToolExecutor, started: datetime) -> dict[str, Any]:
     request = _poisoned_request()
     with incident_trace("unprotected_poisoned_ticket", "god") as tree:
         tree.add("agent_jail.read_untrusted_content", {"content": request.retrieved_content})
         tree.add("agent_jail.agent_proposes_tool", {"tool": request.tool_call.tool_name})
         result = executor.execute(request.tool_call.tool_name, request.tool_call.parameters)
-        tree.add("agent_jail.execute_tool", {"executed": True, "simulated": True})
+        tree.add(
+            "agent_jail.execute_tool",
+            {
+                "executed": True,
+                "provider": result.get("provider"),
+                "sandbox_created": result.get("sandbox_created", False),
+                "sandbox_id": result.get("sandbox_id"),
+            },
+        )
         tool = store.save_tool_call(
             {
                 "agent_id": request.agent_id,
@@ -208,6 +216,7 @@ def _run_unprotected(store: Store, executor: MockExecutor, started: datetime) ->
             "risk": "critical",
             "reason": dec.reason,
             "executed": True,
+            "execution_result": result,
             "checks": [],
             "matched_scars": [],
             "decision_latency_ms": 0,

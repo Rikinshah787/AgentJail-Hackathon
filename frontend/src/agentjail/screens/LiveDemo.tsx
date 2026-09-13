@@ -122,8 +122,8 @@ export function LiveDemo({
       />
 
       <AlertBanner tone="info">
-        Simulated demo only. AgentJail never creates identities, transfers money, or changes real infrastructure in this
-        view.
+        Tool effects are simulated. Allowed calls can run inside an ephemeral, network-isolated CoreWeave Sandbox;
+        AgentJail never changes real IAM or production infrastructure.
       </AlertBanner>
 
       <div className="grid gap-3 md:grid-cols-3">
@@ -256,7 +256,9 @@ function ProtectedBanner({ result }: { result: DemoRunResult }) {
     return (
       <div className="relative mt-5 flex items-center gap-2 rounded-xl border border-aj-allow/50 bg-aj-allow/15 px-4 py-3 font-display text-lg font-bold text-aj-allow">
         <CheckCircle2 className="size-5 shrink-0" aria-hidden />
-        ALLOWED — simulated tool only
+        {result.executorProvider === 'coreweave_sandbox'
+          ? 'ALLOWED — executed in CoreWeave Sandbox'
+          : 'ALLOWED — simulated tool only'}
       </div>
     )
   }
@@ -282,7 +284,11 @@ function TechDetails({
       <div className="flex flex-wrap items-center gap-3">
         <DecisionBadge decision={result.decision} size="lg" />
         <StatusChip tone={result.executed ? 'approve' : 'allow'}>
-          {result.executed ? 'Simulated action ran' : 'No action executed'}
+          {result.executed
+            ? result.executorProvider === 'coreweave_sandbox'
+              ? 'Executed in CoreWeave Sandbox'
+              : 'Simulated action ran'
+            : 'No action executed'}
         </StatusChip>
         {result.matchedScar ? (
           <StatusChip tone="brand">Matched security scar{result.scarName ? `: ${result.scarName}` : ''}</StatusChip>
@@ -305,6 +311,10 @@ function TechDetails({
           <p>Risk: {result.risk}</p>
           {result.traceId ? <p>Trace ID: {result.traceId}</p> : null}
           {result.latencyMs != null ? <p>Decision latency: {result.latencyMs}ms</p> : null}
+          {result.executorProvider ? <p>Executor: {result.executorProvider}</p> : null}
+          {result.sandboxCreated != null ? <p>Sandbox created: {result.sandboxCreated ? 'Yes' : 'No'}</p> : null}
+          {result.sandboxId ? <p>Sandbox ID: {result.sandboxId}</p> : null}
+          {result.executionDurationMs != null ? <p>Sandbox runtime: {result.executionDurationMs}ms</p> : null}
           <p>Tool: {result.tool}</p>
           {result.toolParams && Object.keys(result.toolParams).length ? (
             <p className="sm:col-span-2">
@@ -396,9 +406,16 @@ function PoisonedView({
               </FlowStep>
             </ol>
             {visible >= 3 ? (
-              <div className="mt-5 rounded-xl border border-aj-block/50 bg-aj-block/15 px-4 py-3 font-display text-lg font-bold text-aj-block">
-                BREACH — dangerous action executed
-              </div>
+              <>
+                <div className="mt-5 rounded-xl border border-aj-block/50 bg-aj-block/15 px-4 py-3 font-display text-lg font-bold text-aj-block">
+                  BREACH — dangerous action executed
+                </div>
+                {result?.unprotectedSandboxId ? (
+                  <p className="mt-3 break-all font-mono text-xs text-aj-muted">
+                    CoreWeave Sandbox: {result.unprotectedSandboxId}
+                  </p>
+                ) : null}
+              </>
             ) : (
               <p className="mt-5 text-sm text-aj-muted">Walking through the unprotected path…</p>
             )}

@@ -263,6 +263,11 @@ def trace_authorize(
     matched_scars: list[str] | None = None,
     scenario: str = "authorize",
     checks: list[dict[str, Any]] | None = None,
+    executor_provider: str | None = None,
+    sandbox_created: bool = False,
+    sandbox_id: str | None = None,
+    execution_status: str | None = None,
+    execution_duration_ms: float | None = None,
 ) -> dict[str, Any]:
     """Emit a nested authorize → decision → executor_boundary trace for judges."""
     payload = {
@@ -278,6 +283,11 @@ def trace_authorize(
         "source_verified": source_verified,
         "matched_scars": matched_scars or [],
         "checks": checks or [],
+        "executor_provider": executor_provider,
+        "sandbox_created": sandbox_created,
+        "sandbox_id": sandbox_id,
+        "execution_status": execution_status,
+        "execution_duration_ms": execution_duration_ms,
         "scores": {
             "denied": 1.0 if decision == "deny" else 0.0,
             "allowed": 1.0 if decision == "allow" else 0.0,
@@ -305,6 +315,11 @@ def trace_authorize(
                     "executed": meta["executed"],
                     "executor_requests": meta.get("executor_requests"),
                     "state_changed": meta.get("state_changed"),
+                    "executor_provider": meta.get("executor_provider"),
+                    "sandbox_created": meta.get("sandbox_created"),
+                    "sandbox_id": meta.get("sandbox_id"),
+                    "execution_status": meta.get("execution_status"),
+                    "execution_duration_ms": meta.get("execution_duration_ms"),
                     "independent_observer": True,
                 }
             )
