@@ -7,6 +7,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
 from app.v1.db import Base, make_engine, make_session_factory
+from app.v1.executor import MockExecutor
+from app.v1.gateway import Gateway
 from app.v1.improvement_loop import (
     ImprovementConfig,
     approve_improvement_run,
@@ -15,6 +17,7 @@ from app.v1.improvement_loop import (
     run_improvement_cycle,
 )
 from app.v1.seed import seed
+from app.v1.schemas import ActorIn, AuthorizeRequest, SourceIn, ToolCallIn
 from app.v1.store import Store
 from app.v1.router import router
 
@@ -165,6 +168,66 @@ class ImprovementLoopTests(unittest.TestCase):
     def test_config_rejects_an_unbounded_generation_budget(self) -> None:
         with self.assertRaises(ValueError):
             ImprovementConfig(max_iterations=6)
+
+    def test_gateway_traffic_reconciles_and_quarantines_a_regression(self) -> None:
+        run = run_improvement_cycle(self.store, generator=_proposal)
+        approve_improvement_run(
+            self.store,
+            run["id"],
+            reviewer="security-on-call",
+            review_reason="Initial evaluation passed.",
+        )
+        scar_id = run["candidate_scar_id"]
+        tool = self.store.save_tool_call(
+            {
+                "agent_id": "sre-agent-01",
+                "actor_id": "actor-human-jordan",
+                "tool_name": "restart_service",
+                "action": "restart",
+                "resource": "gpu-worker-3",
+                "parameters": {"service": "gpu-worker-3"},
+                "source": {"source_type": "alert", "verified": True},
+            }
+        )
+        self.store.save_decision(
+            {
+                "tool_call_id": tool.id,
+                "decision": "allow",
+                "risk": "low",
+                "reason": "Observed false-positive scar match.",
+                "matched_scar_ids": [scar_id],
+                "executed": True,
+            }
+        )
+        self.store.commit()
+
+        Gateway(self.store, MockExecutor()).authorize(
+            AuthorizeRequest(
+                agent_id="sre-agent-01",
+                actor=ActorIn(
+                    id="actor-human-jordan",
+                    display_name="Verified operator",
+                    actor_type="human",
+                    roles=["operator"],
+                    verified=True,
+                ),
+                source=SourceIn(
+                    source_type="alert",
+                    display_name="Signed alert",
+                    verified=True,
+                    trust_level="trusted",
+                ),
+                tool_call=ToolCallIn(
+                    tool_name="restart_service",
+                    action="restart",
+                    resource="gpu-worker-12",
+                    parameters={"service": "gpu-worker-12", "blast_radius": "one_service"},
+                ),
+            )
+        )
+
+        self.assertEqual(self.store.get_improvement_run(run["id"]).status, "rolled_back")
+        self.assertEqual(self.store.get_scar(scar_id).status, "inactive")
 
 
 class ImprovementLoopApiTests(unittest.TestCase):
