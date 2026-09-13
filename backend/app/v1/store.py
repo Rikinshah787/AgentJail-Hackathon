@@ -12,6 +12,7 @@ from .db import (
     ApprovalRow,
     DecisionRow,
     IncidentRow,
+    ImprovementRunRow,
     PolicyRow,
     ScarRow,
     ToolCallRow,
@@ -78,6 +79,51 @@ class Store:
         )
         self.session.add(scar)
         return scar
+
+    def save_improvement_run(self, payload: dict[str, Any]) -> ImprovementRunRow:
+        row = ImprovementRunRow(
+            id=payload.get("id") or new_id("loop"),
+            status=payload.get("status") or "running",
+            candidate_scar_id=payload.get("candidate_scar_id"),
+            iterations=int(payload.get("iterations") or 0),
+            config=payload.get("config") or {},
+            variants=payload.get("variants") or [],
+            metrics=payload.get("metrics") or {},
+            monitor_metrics=payload.get("monitor_metrics") or {},
+            history=payload.get("history") or [],
+            stop_reason=payload.get("stop_reason") or "",
+            reviewer=payload.get("reviewer"),
+            review_reason=payload.get("review_reason"),
+            created_at=payload.get("created_at") or utcnow(),
+            activated_at=payload.get("activated_at"),
+            completed_at=payload.get("completed_at"),
+        )
+        self.session.add(row)
+        return row
+
+    def get_improvement_run(self, run_id: str) -> ImprovementRunRow | None:
+        return self.session.get(ImprovementRunRow, run_id)
+
+    def improvement_runs(self) -> list[dict[str, Any]]:
+        rows = self.session.scalars(
+            select(ImprovementRunRow).order_by(ImprovementRunRow.created_at.desc())
+        ).all()
+        return [row_to_dict(row) for row in rows]
+
+    def scar_decisions_since(self, scar_id: str, since: datetime | None) -> list[dict[str, Any]]:
+        rows = self.session.scalars(select(DecisionRow)).all()
+        matches = []
+        for row in rows:
+            created = row.created_at
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            if since is not None:
+                boundary = since if since.tzinfo else since.replace(tzinfo=timezone.utc)
+                if created < boundary:
+                    continue
+            if scar_id in (row.matched_scar_ids or []):
+                matches.append(row_to_dict(row))
+        return matches
 
     def save_tool_call(self, payload: dict[str, Any]) -> ToolCallRow:
         row = ToolCallRow(

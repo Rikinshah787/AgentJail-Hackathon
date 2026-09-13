@@ -104,3 +104,17 @@ class DemoRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scenario: DemoScenario
+
+
+class ImprovementRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_iterations: int = Field(default=3, ge=1, le=5)
+    min_unique_variants: int = Field(default=2, ge=1, le=5)
+
+
+class ImprovementReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reviewer: str = Field(min_length=1, max_length=120)
+    review_reason: str = Field(min_length=1, max_length=1000)

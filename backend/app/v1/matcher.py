@@ -52,12 +52,20 @@ def match_scars(
             indicators.append("privilege_goal")
 
         affected_sources = set(scar.get("affected_sources") or [])
+        # Scope fields are hard boundaries, not merely extra score. Otherwise
+        # a scar learned from an unverified channel can match a verified request
+        # through tool/urgency points alone and create a false positive.
+        if affected_sources and source.source_type not in affected_sources:
+            continue
+        configured_indicators = set(scar.get("indicators") or [])
+        if "unverified_source" in configured_indicators and source.verified:
+            continue
         if not source.verified and (source.source_type in affected_sources or not affected_sources):
             score += 0.25
             indicators.append("unverified_source_category")
 
         dest = str(tool.parameters.get("destination") or tool.parameters.get("to") or "")
-        dest_patterns = scar.get("indicators") or []
+        dest_patterns = configured_indicators
         if dest and any("destination" in str(ind) or dest in str(ind) for ind in dest_patterns):
             score += 0.1
             indicators.append("external_destination_pattern")

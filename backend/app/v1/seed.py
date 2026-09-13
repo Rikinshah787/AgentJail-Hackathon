@@ -141,9 +141,9 @@ def seed(session: Session) -> None:
 
 
 def reset_and_seed(session: Session) -> None:
-    from .db import ApprovalRow, DecisionRow, IncidentRow, ToolCallRow
+    from .db import ApprovalRow, DecisionRow, ImprovementRunRow, IncidentRow, ToolCallRow
 
-    for model in (ApprovalRow, DecisionRow, IncidentRow, ToolCallRow, ScarRow, PolicyRow, ActorRow, AgentRow):
+    for model in (ImprovementRunRow, ApprovalRow, DecisionRow, IncidentRow, ToolCallRow, ScarRow, PolicyRow, ActorRow, AgentRow):
         for row in session.scalars(select(model)).all():
             session.delete(row)
     session.commit()

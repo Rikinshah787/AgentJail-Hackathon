@@ -12,7 +12,13 @@ from .evaluate import run_harness
 from .gateway import Gateway
 from .probe import run_independent_probes
 from .runtime import executor, reset_demo, session
-from .schemas import ApprovalActionRequest, AuthorizeRequest, DemoRunRequest
+from .schemas import (
+    ApprovalActionRequest,
+    AuthorizeRequest,
+    DemoRunRequest,
+    ImprovementReviewRequest,
+    ImprovementRunRequest,
+)
 from .serialize import to_plain
 from .store import Store, row_to_dict
 from .weave_eval import run_weave_evaluation
@@ -59,6 +65,70 @@ def incident(incident_id: str):
 def scars():
     with session() as db:
         return Store(db).scars()
+
+
+@router.get("/improvement/runs")
+def improvement_runs():
+    with session() as db:
+        return Store(db).improvement_runs()
+
+
+@router.get("/improvement/runs/{run_id}")
+def improvement_run(run_id: str):
+    with session() as db:
+        store = Store(db)
+        row = store.get_improvement_run(run_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Improvement run not found")
+        return row_to_dict(row)
+
+
+@router.post("/improvement/runs")
+def start_improvement_run(body: ImprovementRunRequest):
+    from .improvement_loop import ImprovementConfig, run_improvement_cycle
+
+    try:
+        config = ImprovementConfig(
+            max_iterations=body.max_iterations,
+            min_unique_variants=body.min_unique_variants,
+        )
+        with session() as db:
+            return run_improvement_cycle(Store(db), config=config)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/improvement/runs/{run_id}/approve")
+def approve_improvement(run_id: str, body: ImprovementReviewRequest):
+    from .improvement_loop import approve_improvement_run
+
+    with session() as db:
+        try:
+            return approve_improvement_run(
+                Store(db),
+                run_id,
+                reviewer=body.reviewer,
+                review_reason=body.review_reason,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Improvement run not found") from exc
+        except (ValueError, PermissionError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/improvement/runs/{run_id}/monitor")
+def monitor_improvement(run_id: str):
+    from .improvement_loop import monitor_improvement_run
+
+    with session() as db:
+        try:
+            return monitor_improvement_run(Store(db), run_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Improvement run not found") from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/scars/{scar_id}/activate")
